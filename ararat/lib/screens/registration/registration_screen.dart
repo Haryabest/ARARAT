@@ -58,6 +58,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   CustomFormField(
                     controller: _loginController,
                     label: 'Логин',
+                    isAuthScreen: true,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Обязательное поле';
@@ -74,6 +75,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   CustomFormField(
                     controller: _emailController,
                     label: 'Почта',
+                    isAuthScreen: true,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Обязательное поле';
@@ -94,6 +96,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                     controller: _passwordController,
                     label: 'Пароль',
                     obscureText: true,
+                    isAuthScreen: true,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Обязательное поле';

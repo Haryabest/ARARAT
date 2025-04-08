@@ -595,6 +595,22 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 16),
                   
+                  // Промо-акции, горизонтальный скролл
+                  SizedBox(
+                    height: 120,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      itemCount: 8, // Количество промо-блоков
+                      itemBuilder: (context, index) {
+                        return _buildPromoBlock(index);
+                      },
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 16),
+                  
                   // Категории с сортировкой
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -1431,6 +1447,151 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
       },
     );
   }
+  
+  // Метод для построения промо-блоков
+  Widget _buildPromoBlock(int index) {
+    // Разные цвета для разных блоков
+    final List<Color> colors = [
+      const Color(0xFF6C4425),
+      const Color(0xFF8D6E63),
+      const Color(0xFFA1887F),
+      const Color(0xFF4E342E),
+      const Color(0xFF3E2723),
+      const Color(0xFF5D4037),
+      const Color(0xFF7B5E57),
+      const Color(0xFF9C786C),
+    ];
+    
+    // Разные заголовки акций
+    final List<String> titles = [
+      'Скидка 20%',
+      'Акция 1+1',
+      'Новинка',
+      'Специальное предложение',
+      'Бесплатная доставка',
+      'Распродажа',
+      'Подарок',
+      'Только сегодня',
+    ];
+    
+    return Container(
+      width: 248,
+      height: 68,
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        color: colors[index % colors.length],
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        textDirection: TextDirection.ltr,
+        verticalDirection: VerticalDirection.down,
+        children: [
+          // Основное содержимое
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Заголовок акции
+                  Text(
+                    titles[index % titles.length],
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  // Описание акции
+                  Text(
+                    'На выбранные товары из категории "${_productsByCategory.keys.elementAt(index % _productsByCategory.length)}"',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 10,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // Полоса предупреждения (черно-желтые полосы)
+          Container(
+            height: 12,
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+              child: CustomPaint(
+                size: const Size(double.infinity, 12),
+                painter: StripePainter(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Класс для рисования черно-желтых полос
+class StripePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint();
+    
+    // Размер полосы
+    double stripeWidth = 12.0;
+    
+    // Рисуем полосы
+    for (double i = -stripeWidth; i < size.width + stripeWidth; i += stripeWidth) {
+      // Желтая полоса
+      paint.color = const Color(0xFFFFD600);
+      var yellowPath = Path();
+      yellowPath.moveTo(i, 0);
+      yellowPath.lineTo(i + stripeWidth, 0);
+      yellowPath.lineTo(i, size.height);
+      yellowPath.lineTo(i - stripeWidth, size.height);
+      yellowPath.close();
+      canvas.drawPath(yellowPath, paint);
+      
+      // Черная полоса
+      paint.color = Colors.black;
+      var blackPath = Path();
+      blackPath.moveTo(i + stripeWidth, 0);
+      blackPath.lineTo(i + 2 * stripeWidth, 0);
+      blackPath.lineTo(i + stripeWidth, size.height);
+      blackPath.lineTo(i, size.height);
+      blackPath.close();
+      canvas.drawPath(blackPath, paint);
+    }
+  }
+  
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
 
 class _SlidingGradientTransform extends GradientTransform {

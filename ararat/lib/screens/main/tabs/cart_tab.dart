@@ -1,3 +1,4 @@
+import 'package:ararat/widgets/checkout_form.dart';
 import 'package:flutter/material.dart';
 import 'package:ararat/screens/main/main_screen.dart';
 import 'package:ararat/screens/main/tabs/home_tab.dart';
@@ -739,13 +740,8 @@ class _CartTabState extends State<CartTab> with TickerProviderStateMixin {
                         _checkoutButtonController.reverse();
                       });
                       
-                      // Логика оформления заказа
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Заказ оформлен!'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
+                      // Показываем форму оформления заказа
+                      showCheckoutForm(context);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
@@ -775,6 +771,16 @@ class _CartTabState extends State<CartTab> with TickerProviderStateMixin {
           ),
         ],
       ),
+    );
+  }
+
+  // Метод для показа формы оформления заказа
+  void showCheckoutForm(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const CheckoutForm(),
     );
   }
 } 

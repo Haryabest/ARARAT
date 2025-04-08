@@ -1,4 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:ararat/screens/main/tabs/other_profile_tabs/orders_tab.dart';
+import 'package:ararat/screens/main/tabs/other_profile_tabs/delivery_addresses_tab.dart';
+import 'package:ararat/screens/main/tabs/other_profile_tabs/payment_methods_tab.dart';
+import 'package:ararat/screens/main/tabs/other_profile_tabs/notifications_tab.dart';
+import 'package:ararat/screens/main/tabs/other_profile_tabs/settings_tab.dart';
+import 'package:ararat/screens/main/tabs/other_profile_tabs/support_tab.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
@@ -6,27 +12,13 @@ class ProfileTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF6F1),
+      backgroundColor: const Color(0xFFA99378),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Заголовок
-              const Padding(
-                padding: EdgeInsets.only(bottom: 24),
-                child: Text(
-                  'Профиль',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF50321B),
-                  ),
-                ),
-              ),
-              
               // Информация о пользователе
               Container(
                 padding: const EdgeInsets.all(16),
@@ -94,12 +86,42 @@ class ProfileTab extends StatelessWidget {
               const SizedBox(height: 24),
               
               // Меню настроек
-              _menuItem(Icons.shopping_bag, 'Мои заказы'),
-              _menuItem(Icons.location_on, 'Адреса доставки'),
-              _menuItem(Icons.credit_card, 'Способы оплаты'),
-              _menuItem(Icons.notifications, 'Уведомления'),
-              _menuItem(Icons.settings, 'Настройки'),
-              _menuItem(Icons.help, 'Справка и поддержка'),
+              _menuItem(
+                context,
+                Icons.shopping_bag,
+                'Мои заказы',
+                const OrdersTab(),
+              ),
+              _menuItem(
+                context,
+                Icons.location_on,
+                'Адреса доставки',
+                const DeliveryAddressesTab(),
+              ),
+              _menuItem(
+                context,
+                Icons.credit_card,
+                'Способы оплаты',
+                const PaymentMethodsTab(),
+              ),
+              _menuItem(
+                context,
+                Icons.notifications,
+                'Уведомления',
+                const NotificationsTab(),
+              ),
+              _menuItem(
+                context,
+                Icons.settings,
+                'Настройки',
+                const SettingsTab(),
+              ),
+              _menuItem(
+                context,
+                Icons.help,
+                'Справка и поддержка',
+                const SupportTab(),
+              ),
               
               const Spacer(),
               
@@ -140,12 +162,15 @@ class ProfileTab extends StatelessWidget {
     );
   }
   
-  Widget _menuItem(IconData icon, String title) {
+  Widget _menuItem(BuildContext context, IconData icon, String title, Widget destination) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: () {
-          // Обработка нажатия на пункт меню
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => destination),
+          );
         },
         borderRadius: BorderRadius.circular(8),
         child: Container(

@@ -53,6 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
               CustomFormField(
                 controller: _emailController,
                 label: 'Логин/Почта',
+                isAuthScreen: true,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Обязательное поле';
@@ -70,6 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 controller: _passwordController,
                 label: 'Пароль',
                 obscureText: true,
+                isAuthScreen: true,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Обязательное поле';
