@@ -7,7 +7,9 @@ import 'package:ararat/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:ararat/services/image_storage_service.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -18,6 +20,7 @@ class ProfileTab extends StatefulWidget {
 
 class _ProfileTabState extends State<ProfileTab> {
   final AuthService _authService = AuthService();
+  final ImageStorageService _imageService = ImageStorageService();
   String _displayName = '';
   String _email = '';
   bool _isLoading = true;
@@ -29,14 +32,13 @@ class _ProfileTabState extends State<ProfileTab> {
   bool _isConfirmPasswordHidden = true;
   File? _imageFile;
   bool _isUploadingImage = false;
-  String? _photoURL;
-
+  
   @override
   void initState() {
     super.initState();
     _loadUserData();
   }
-
+  
   Future<void> _loadUserData() async {
     setState(() {
       _isLoading = true;
@@ -52,6 +54,8 @@ class _ProfileTabState extends State<ProfileTab> {
       String displayName = user?.displayName ?? 'Пользователь';
       String email = user?.email ?? 'Нет email';
       
+      print('Загрузка данных пользователя: $displayName, $email');
+      
       // Пробуем получить дополнительные данные из Firestore
       Map<String, dynamic>? userData = await _authService.getUserData();
       if (userData != null) {
@@ -59,25 +63,226 @@ class _ProfileTabState extends State<ProfileTab> {
         if (userData['displayName'] != null) {
           displayName = userData['displayName'];
         }
-        // Получаем URL фото профиля
-        if (userData['photoURL'] != null) {
-          _photoURL = userData['photoURL'];
-        }
       }
+
+      // Загружаем изображение профиля из нашего сервиса
+      File? profileImage = await _imageService.getImage(email);
+      
+      print('Изображение профиля загружено: ${profileImage != null}');
 
       setState(() {
         _displayName = displayName;
         _email = email;
+        _imageFile = profileImage;
         _isLoading = false;
       });
     } else {
       setState(() {
         _displayName = 'Не авторизован';
         _email = '';
-        _photoURL = null;
+        _imageFile = null;
         _isLoading = false;
       });
     }
+  }
+  
+  Future<void> _pickImage() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery, 
+        maxWidth: 800, // Ограничиваем размер для экономии памяти
+        maxHeight: 800,
+        imageQuality: 80, // Немного сжимаем для экономии памяти
+      );
+      
+      if (image != null) {
+        setState(() {
+          _imageFile = File(image.path);
+          _isUploadingImage = true;
+        });
+        
+        await _saveImageToLocalStorage();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при выборе изображения: ${e.toString()}')),
+      );
+    }
+  }
+  
+  // Сохранение изображения в локальное хранилище
+  Future<void> _saveImageToLocalStorage() async {
+    try {
+      if (_imageFile == null || _email.isEmpty) {
+        setState(() {
+          _isUploadingImage = false;
+        });
+        return;
+      }
+      
+      // Сохраняем изображение в наш сервис
+      bool success = await _imageService.saveImage(_imageFile!, _email);
+      
+      if (success) {
+        // Перезагружаем файл, чтобы убедиться, что он сохранен правильно
+        final savedImage = await _imageService.getImage(_email);
+        if (savedImage != null) {
+          setState(() {
+            _imageFile = savedImage;
+            _isUploadingImage = false;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Фото профиля обновлено')),
+          );
+        } else {
+          throw 'Не удалось проверить сохраненное изображение';
+        }
+      } else {
+        throw 'Не удалось сохранить изображение';
+      }
+    } catch (e) {
+      setState(() {
+        _isUploadingImage = false;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при сохранении изображения: ${e.toString()}')),
+      );
+    }
+  }
+  
+  Future<void> _saveUserData() async {
+    FocusScope.of(context).unfocus();
+    
+    setState(() {
+      _isUserDataLoading = true;
+    });
+
+    try {
+      String login = _loginController.text.trim();
+      String password = _passwordController.text;
+      String confirmPassword = _confirmPasswordController.text;
+      
+      if (login.isEmpty) {
+        throw 'Логин не может быть пустым';
+      }
+      
+      if (login.contains(RegExp(r'[а-яА-Я]'))) {
+        throw 'Логин не может содержать русские буквы';
+      }
+      
+      if (password.isNotEmpty) {
+        if (password.length < 6) {
+          throw 'Пароль должен быть не менее 6 символов';
+        }
+        
+        if (password != confirmPassword) {
+          throw 'Пароли не совпадают';
+        }
+        
+        // Обновляем пароль
+        await _authService.updatePassword(password);
+      }
+      
+      // Обновляем данные пользователя
+      await _authService.updateUserData({
+        'displayName': login
+      });
+      
+      // Обновляем данные в UI
+      await _loadUserData();
+      
+      // Закрываем диалог
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Данные успешно сохранены')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка: ${e.toString()}')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUserDataLoading = false;
+        });
+      }
+    }
+  }
+  
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFFF8F2E9),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          title: const Text(
+            'Выход из аккаунта',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF50321B),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          content: const Text(
+            'Вы уверены, что хотите выйти из своего аккаунта?',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 14,
+              color: Color(0xFF50321B),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF50321B),
+                  ),
+                  child: const Text(
+                    'Отмена',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF50321B),
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: _signOut,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF50321B),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Выйти',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _signOut() async {
@@ -86,6 +291,11 @@ class _ProfileTabState extends State<ProfileTab> {
       setState(() {
         _isLoading = true;
       });
+      
+      // Очищаем изображение текущего пользователя
+      if (_email.isNotEmpty) {
+        await _imageService.clearCurrentUserImage(_email);
+      }
       
       // Выход из аккаунта Firebase
       await _authService.signOut();
@@ -109,393 +319,6 @@ class _ProfileTabState extends State<ProfileTab> {
       setState(() {
         _isLoading = false;
       });
-    }
-  }
-
-  // Показать диалог подтверждения выхода
-  Future<void> _showLogoutDialog() async {
-    return showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text(
-            'Выход из аккаунта',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              color: Color(0xFF50321B),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          content: const Text(
-            'Вы действительно хотите выйти из аккаунта?',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              color: Color(0xFF333333),
-            ),
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF50321B),
-              ),
-              child: const Text(
-                'Отмена',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _signOut();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF50321B),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text(
-                'Выйти',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Функция для выбора изображения из галереи
-  Future<void> _pickImage() async {
-    try {
-      final ImagePicker _picker = ImagePicker();
-      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-      
-      if (pickedFile != null) {
-        setState(() {
-          _imageFile = File(pickedFile.path);
-          _isUploadingImage = true;
-        });
-        
-        await _uploadImageToFirebase();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ошибка при выборе изображения')),
-      );
-    }
-  }
-  
-  // Загрузка изображения в Firebase Storage
-  Future<void> _uploadImageToFirebase() async {
-    try {
-      final User? user = _authService.currentUser;
-      if (user == null || _imageFile == null) return;
-      
-      final storageRef = firebase_storage.FirebaseStorage.instance
-          .ref()
-          .child('profile_images')
-          .child('${user.uid}.jpg');
-      
-      await storageRef.putFile(_imageFile!);
-      final String downloadUrl = await storageRef.getDownloadURL();
-      
-      // Обновляем URL фото в Firestore
-      await _authService.updateUserData({'photoURL': downloadUrl});
-      
-      // Обновляем данные пользователя
-      await _loadUserData();
-      
-      setState(() {
-        _isUploadingImage = false;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Фото профиля обновлено')),
-      );
-    } catch (e) {
-      setState(() {
-        _isUploadingImage = false;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка при загрузке изображения: ${e.toString()}')),
-      );
-    }
-  }
-  
-  // Диалог изменения логина и пароля
-  void _showEditUserDataDialog() {
-    _loginController.text = _displayName;
-    _passwordController.clear();
-    _confirmPasswordController.clear();
-    
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFFF8F2E9),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              title: const Text(
-                'Изменение данных',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF50321B),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: _loginController,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        color: Color(0xFF50321B),
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Логин',
-                        labelStyle: const TextStyle(
-                          fontFamily: 'Inter',
-                          color: Color(0xFF8C7963),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF50321B)),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: _isPasswordHidden,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        color: Color(0xFF50321B),
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Новый пароль',
-                        labelStyle: const TextStyle(
-                          fontFamily: 'Inter',
-                          color: Color(0xFF8C7963),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF50321B)),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordHidden 
-                                ? Icons.visibility_off 
-                                : Icons.visibility,
-                            color: const Color(0xFF50321B),
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordHidden = !_isPasswordHidden;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _confirmPasswordController,
-                      obscureText: _isConfirmPasswordHidden,
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        color: Color(0xFF50321B),
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Подтверждение пароля',
-                        labelStyle: const TextStyle(
-                          fontFamily: 'Inter',
-                          color: Color(0xFF8C7963),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF50321B)),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isConfirmPasswordHidden 
-                                ? Icons.visibility_off 
-                                : Icons.visibility,
-                            color: const Color(0xFF50321B),
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _isConfirmPasswordHidden = !_isConfirmPasswordHidden;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF50321B),
-                      ),
-                      child: const Text(
-                        'Отмена',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF50321B),
-                        ),
-                      ),
-                    ),
-                    _isUserDataLoading
-                        ? const CircularProgressIndicator(
-                            color: Color(0xFF50321B),
-                            strokeWidth: 3,
-                          )
-                        : TextButton(
-                            onPressed: _saveUserData,
-                            style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFF50321B),
-                            ),
-                            child: const Text(
-                              'Сохранить',
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF50321B),
-                              ),
-                            ),
-                          ),
-                  ],
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-  
-  // Сохранение данных пользователя
-  void _saveUserData() async {
-    // Проверка на пустое поле логина
-    if (_loginController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Логин не может быть пустым')),
-      );
-      return;
-    }
-    
-    // Проверка соответствия паролей, если пароль введен
-    if (_passwordController.text.isNotEmpty && 
-        _passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пароли не совпадают')),
-      );
-      return;
-    }
-    
-    // Проверка минимальной длины пароля
-    if (_passwordController.text.isNotEmpty && _passwordController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пароль должен содержать минимум 6 символов')),
-      );
-      return;
-    }
-    
-    // Начало процесса сохранения
-    setState(() {
-      _isUserDataLoading = true;
-    });
-    
-    try {
-      // Обновление логина
-      await _authService.updateUserData({
-        'displayName': _loginController.text.trim(),
-      });
-      
-      // Обновление пароля, если он был введен
-      if (_passwordController.text.isNotEmpty) {
-        await _authService.updatePassword(_passwordController.text);
-      }
-      
-      // Перезагрузка данных пользователя
-      await _loadUserData();
-      
-      setState(() {
-        _isUserDataLoading = false;
-      });
-      
-      Navigator.pop(context); // Закрываем диалог
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Данные успешно обновлены')),
-      );
-    } catch (e) {
-      setState(() {
-        _isUserDataLoading = false;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка при обновлении данных: ${e.toString()}')),
-      );
     }
   }
 
@@ -559,10 +382,8 @@ class _ProfileTabState extends State<ProfileTab> {
                                         ? null 
                                         : _imageFile != null
                                             ? FileImage(_imageFile!)
-                                            : _photoURL != null
-                                                ? NetworkImage(_photoURL!) as ImageProvider<Object>
-                                                : null,
-                                    child: _isLoading || (_imageFile == null && _photoURL == null)
+                                            : null,
+                                    child: _isLoading || (_imageFile == null)
                                         ? const Icon(
                                             Icons.person,
                                             size: 35,
@@ -786,6 +607,200 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showEditUserDataDialog() {
+    _loginController.text = _displayName;
+    _passwordController.clear();
+    _confirmPasswordController.clear();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFFF8F2E9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: const Text(
+                'Изменение данных',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF50321B),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: _loginController,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        color: Color(0xFF50321B),
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Логин',
+                        labelStyle: const TextStyle(
+                          fontFamily: 'Inter',
+                          color: Color(0xFF8C7963),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF50321B)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: _isPasswordHidden,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        color: Color(0xFF50321B),
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Новый пароль',
+                        labelStyle: const TextStyle(
+                          fontFamily: 'Inter',
+                          color: Color(0xFF8C7963),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF50321B)),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordHidden 
+                                ? Icons.visibility_off 
+                                : Icons.visibility,
+                            color: const Color(0xFF50321B),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordHidden = !_isPasswordHidden;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _confirmPasswordController,
+                      obscureText: _isConfirmPasswordHidden,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        color: Color(0xFF50321B),
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Подтверждение пароля',
+                        labelStyle: const TextStyle(
+                          fontFamily: 'Inter',
+                          color: Color(0xFF8C7963),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF50321B)),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isConfirmPasswordHidden 
+                                ? Icons.visibility_off 
+                                : Icons.visibility,
+                            color: const Color(0xFF50321B),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isConfirmPasswordHidden = !_isConfirmPasswordHidden;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF50321B),
+                      ),
+                      child: const Text(
+                        'Отмена',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF50321B),
+                        ),
+                      ),
+                    ),
+                    _isUserDataLoading
+                        ? const CircularProgressIndicator(
+                            color: Color(0xFF50321B),
+                            strokeWidth: 3,
+                          )
+                        : TextButton(
+                            onPressed: _saveUserData,
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF50321B),
+                            ),
+                            child: const Text(
+                              'Сохранить',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF50321B),
+                              ),
+                            ),
+                          ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
