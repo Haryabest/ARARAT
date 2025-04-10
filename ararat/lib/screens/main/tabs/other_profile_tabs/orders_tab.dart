@@ -277,232 +277,235 @@ class _OrdersTabState extends State<OrdersTab> {
       paymentMethodText = 'QR-код';
     }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Заголовок заказа
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Заказ #${order.id.substring(0, 8)}',
-                  style: const TextStyle(
-                    color: Color(0xFF50321B),
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Text(
-                    order.status,
-                    style: TextStyle(
-                      color: statusColor,
+    return GestureDetector(
+      onLongPress: () => _showDeleteConfirmation(order.id),
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        elevation: 2,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Заголовок заказа
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Заказ #${order.id.substring(0, 8)}',
+                    style: const TextStyle(
+                      color: Color(0xFF50321B),
                       fontFamily: 'Inter',
-                      fontSize: 12,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            
-            // Дата заказа
-            Text(
-              'Дата: $formattedDate',
-              style: TextStyle(
-                color: Colors.grey[600],
-                fontFamily: 'Inter',
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            // Информация о доставке
-            Row(
-              children: [
-                Icon(
-                  Icons.local_shipping_outlined, 
-                  size: 14, 
-                  color: Colors.grey[600]
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Доставка: $deliveryTypeText',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontFamily: 'Inter',
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-            
-            // Способ оплаты
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(
-                  order.paymentMethod.toLowerCase() == 'qr' 
-                      ? Icons.qr_code 
-                      : Icons.payments_outlined, 
-                  size: 14, 
-                  color: Colors.grey[600]
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Оплата: $paymentMethodText',
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontFamily: 'Inter',
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-            
-            // Адрес доставки
-            if (order.deliveryAddress['address'] != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.location_on_outlined, 
-                      size: 14, 
-                      color: Colors.grey[600]
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        'Адрес: ${order.deliveryAddress['address']}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontFamily: 'Inter',
-                          fontSize: 14,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                    child: Text(
+                      order.status,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Дата заказа
+              Text(
+                'Дата: $formattedDate',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontFamily: 'Inter',
+                  fontSize: 14,
                 ),
               ),
-            
-            const SizedBox(height: 16),
-            
-            // Список товаров
-            ...order.items.map((item) => _buildOrderItemRow(item)),
-            
-            const Divider(height: 24),
-            
-            // Итоговая информация
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Товары:',
-                  style: TextStyle(
-                    color: Color(0xFF50321B),
-                    fontFamily: 'Inter',
-                    fontSize: 14,
+              const SizedBox(height: 8),
+              
+              // Информация о доставке
+              Row(
+                children: [
+                  Icon(
+                    Icons.local_shipping_outlined, 
+                    size: 14, 
+                    color: Colors.grey[600]
                   ),
-                ),
-                Text(
-                  '${order.subtotal.toStringAsFixed(0)} ₽',
-                  style: const TextStyle(
-                    color: Color(0xFF50321B),
-                    fontFamily: 'Inter',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(width: 4),
+                  Text(
+                    'Доставка: $deliveryTypeText',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontFamily: 'Inter',
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Доставка:',
-                  style: TextStyle(
-                    color: Color(0xFF50321B),
-                    fontFamily: 'Inter',
-                    fontSize: 14,
+                ],
+              ),
+              
+              // Способ оплаты
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(
+                    order.paymentMethod.toLowerCase() == 'qr' 
+                        ? Icons.qr_code 
+                        : Icons.payments_outlined, 
+                    size: 14, 
+                    color: Colors.grey[600]
                   ),
-                ),
-                Text(
-                  order.deliveryCost > 0 ? '${order.deliveryCost.toStringAsFixed(0)} ₽' : 'Бесплатно',
-                  style: TextStyle(
-                    color: order.deliveryCost > 0 ? Color(0xFF50321B) : Colors.green,
-                    fontFamily: 'Inter',
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
+                  const SizedBox(width: 4),
+                  Text(
+                    'Оплата: $paymentMethodText',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontFamily: 'Inter',
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Итого:',
-                  style: TextStyle(
-                    color: Color(0xFF50321B),
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  '${order.total.toStringAsFixed(0)} ₽',
-                  style: const TextStyle(
-                    color: Color(0xFF50321B),
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            // Действия с заказом
-            order.status.toLowerCase() == 'новый' || order.status.toLowerCase() == 'в обработке'
-                ? Row(
+                ],
+              ),
+              
+              // Адрес доставки
+              if (order.deliveryAddress['address'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
                     children: [
+                      Icon(
+                        Icons.location_on_outlined, 
+                        size: 14, 
+                        color: Colors.grey[600]
+                      ),
+                      const SizedBox(width: 4),
                       Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _cancelOrder(order.id),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red.withOpacity(0.1),
-                            foregroundColor: Colors.red,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                        child: Text(
+                          'Адрес: ${order.deliveryAddress['address']}',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontFamily: 'Inter',
+                            fontSize: 14,
                           ),
-                          child: const Text('Отменить заказ'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
-                  )
-                : const SizedBox.shrink(),
-          ],
+                  ),
+                ),
+              
+              const SizedBox(height: 16),
+              
+              // Список товаров
+              ...order.items.map((item) => _buildOrderItemRow(item)),
+              
+              const Divider(height: 24),
+              
+              // Итоговая информация
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Товары:',
+                    style: TextStyle(
+                      color: Color(0xFF50321B),
+                      fontFamily: 'Inter',
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    '${order.subtotal.toStringAsFixed(0)} ₽',
+                    style: const TextStyle(
+                      color: Color(0xFF50321B),
+                      fontFamily: 'Inter',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Доставка:',
+                    style: TextStyle(
+                      color: Color(0xFF50321B),
+                      fontFamily: 'Inter',
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    order.deliveryCost > 0 ? '${order.deliveryCost.toStringAsFixed(0)} ₽' : 'Бесплатно',
+                    style: TextStyle(
+                      color: order.deliveryCost > 0 ? Color(0xFF50321B) : Colors.green,
+                      fontFamily: 'Inter',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Итого:',
+                    style: TextStyle(
+                      color: Color(0xFF50321B),
+                      fontFamily: 'Inter',
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '${order.total.toStringAsFixed(0)} ₽',
+                    style: const TextStyle(
+                      color: Color(0xFF50321B),
+                      fontFamily: 'Inter',
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // Действия с заказом
+              order.status.toLowerCase() == 'новый' || order.status.toLowerCase() == 'в обработке'
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () => _cancelOrder(order.id),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.withOpacity(0.1),
+                              foregroundColor: Colors.red,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text('Отменить заказ'),
+                          ),
+                        ),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ],
+          ),
         ),
       ),
     );
@@ -708,6 +711,111 @@ class _OrdersTabState extends State<OrdersTab> {
               foregroundColor: Colors.red,
             ),
             child: const Text('Отменить заказ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Метод для показа диалога подтверждения удаления заказа
+  Future<void> _showDeleteConfirmation(String orderId) async {
+    // Создаем ключ для диалога загрузки
+    final GlobalKey<State> _loadingDialogKey = GlobalKey<State>();
+    
+    // Переменная для отслеживания состояния диалога загрузки
+    bool isLoadingDialogClosed = false;
+    
+    // Функция для безопасного закрытия диалога загрузки
+    void closeLoadingDialog() {
+      if (!isLoadingDialogClosed && _loadingDialogKey.currentContext != null) {
+        isLoadingDialogClosed = true;
+        Navigator.of(_loadingDialogKey.currentContext!, rootNavigator: true).pop();
+      }
+    }
+    
+    // Проверяем, активен ли виджет
+    if (!mounted) return;
+    
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Удалить заказ?'),
+        content: const Text(
+          'Заказ будет перемещен в историю. Вы сможете просмотреть его позже во вкладке "История".',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () async {
+              // Закрываем диалог подтверждения
+              Navigator.pop(dialogContext);
+              
+              // Проверяем, активен ли виджет после закрытия диалога
+              if (!mounted) return;
+              
+              // Показываем индикатор загрузки
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (loadingContext) => Dialog(
+                  key: _loadingDialogKey,
+                  child: const Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: Color(0xFF50321B)),
+                        SizedBox(width: 20),
+                        Text('Удаление заказа...'),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+              
+              try {
+                // Удаляем заказ
+                await _orderService.deleteOrder(orderId);
+                
+                // Безопасно закрываем индикатор загрузки
+                closeLoadingDialog();
+                
+                // Обновляем список заказов, если виджет всё ещё активен
+                if (mounted) {
+                  setState(() {
+                    _orders.removeWhere((order) => order.id == orderId);
+                  });
+                  
+                  // Показываем уведомление
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Заказ перемещен в историю'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                // Безопасно закрываем индикатор загрузки в случае ошибки
+                closeLoadingDialog();
+                
+                // Показываем уведомление об ошибке, если виджет всё ещё активен
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Ошибка при удалении заказа: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Удалить'),
           ),
         ],
       ),

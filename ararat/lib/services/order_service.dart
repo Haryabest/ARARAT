@@ -766,4 +766,197 @@ class OrderService {
         return '#9E9E9E'; // Grey
     }
   }
+  
+  // Удаление заказа (перемещение в историю)
+  Future<void> deleteOrder(String orderId) async {
+    User? user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Пользователь не авторизован');
+    }
+
+    try {
+      // Проверяем, что заказ принадлежит пользователю
+      final orderDoc = await _ordersCollection.doc(orderId).get();
+      if (!orderDoc.exists) {
+        throw Exception('Заказ не найден');
+      }
+
+      final orderData = orderDoc.data() as Map<String, dynamic>;
+      if (orderData['userId'] != user.uid) {
+        throw Exception('Доступ запрещен');
+      }
+
+      // Текущее время для обновления
+      final now = FieldValue.serverTimestamp();
+
+      // Копируем данные заказа в коллекцию истории заказов
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('orderHistory')
+          .doc(orderId)
+          .set({
+        'orderId': orderId,
+        'originalData': orderData,
+        'deletedAt': now,
+        'restorable': true
+      });
+
+      // Удаляем заказ из основной коллекции пользователя
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('orders')
+          .doc(orderId)
+          .delete();
+
+      // Обновляем метаданные в основной коллекции заказов
+      await _ordersCollection.doc(orderId).update({
+        'isDeleted': true,
+        'deletedAt': now,
+        'deletedBy': user.uid,
+      });
+
+      print('Заказ успешно удален и перемещен в историю: $orderId');
+    } catch (e) {
+      print('Ошибка при удалении заказа: $e');
+      throw e;
+    }
+  }
+  
+  // Получение истории заказов пользователя
+  Future<List<Map<String, dynamic>>> getOrderHistory() async {
+    User? user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Пользователь не авторизован');
+    }
+
+    try {
+      print('Начинаем загрузку истории заказов для пользователя: ${user.uid}');
+      
+      // Получаем все заказы из истории
+      final historyDocs = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('orderHistory')
+          .orderBy('deletedAt', descending: true)
+          .get();
+
+      // Если история пуста
+      if (historyDocs.docs.isEmpty) {
+        print('История заказов пользователя пуста');
+        return [];
+      }
+
+      print('Найдено записей в истории: ${historyDocs.docs.length}');
+      
+      // Формируем список с информацией о заказах
+      List<Map<String, dynamic>> historyItems = [];
+      
+      for (var doc in historyDocs.docs) {
+        try {
+          final data = doc.data();
+          final orderId = data['orderId'] as String?;
+          final originalData = data['originalData'] as Map<String, dynamic>?;
+          
+          if (orderId == null || originalData == null) {
+            print('Пропускаем некорректную запись в истории: ${doc.id}');
+            continue;
+          }
+          
+          // Получаем основные детали из оригинальных данных заказа
+          historyItems.add({
+            'id': orderId,
+            'deletedAt': data['deletedAt'] is Timestamp 
+                ? (data['deletedAt'] as Timestamp).toDate() 
+                : DateTime.now(),
+            'restorable': data['restorable'] ?? false,
+            'items': originalData['items'] ?? [],
+            'total': originalData['total'] ?? 0.0,
+            'status': originalData['status'] ?? 'удален',
+            'createdAt': originalData['createdAt'] is Timestamp 
+                ? (originalData['createdAt'] as Timestamp).toDate() 
+                : DateTime.now(),
+            'deliveryType': originalData['deliveryType'] ?? 'standard',
+            'paymentMethod': originalData['paymentMethod'] ?? 'cash',
+            'deliveryAddress': originalData['deliveryAddress'] ?? {},
+          });
+        } catch (e) {
+          print('Ошибка при обработке записи истории ${doc.id}: $e');
+        }
+      }
+
+      print('Успешно загружено элементов истории: ${historyItems.length}');
+      return historyItems;
+    } catch (e) {
+      print('Ошибка при получении истории заказов: $e');
+      throw Exception('Не удалось загрузить историю заказов: ${e.toString()}');
+    }
+  }
+  
+  // Восстановление заказа из истории
+  Future<void> restoreOrderFromHistory(String orderId) async {
+    User? user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Пользователь не авторизован');
+    }
+
+    try {
+      // Проверяем, что заказ есть в истории
+      final historyDoc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('orderHistory')
+          .doc(orderId)
+          .get();
+          
+      if (!historyDoc.exists) {
+        throw Exception('Заказ не найден в истории');
+      }
+
+      final historyData = historyDoc.data() as Map<String, dynamic>;
+      if (!historyData['restorable']) {
+        throw Exception('Этот заказ невозможно восстановить');
+      }
+
+      // Восстанавливаем заказ в основной коллекции пользователя
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('orders')
+          .doc(orderId)
+          .set({
+        'orderId': orderId,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'status': historyData['originalData']['status'],
+        'createdAt': historyData['originalData']['createdAt'],
+        // Копируем остальные важные поля
+        'total': historyData['originalData']['total'],
+        'items': historyData['originalData']['items'],
+        'deliveryType': historyData['originalData']['deliveryType'],
+        'deliveryAddress': historyData['originalData']['deliveryAddress'],
+        'phoneNumber': historyData['originalData']['phoneNumber'],
+      });
+
+      // Обновляем метаданные в основной коллекции заказов
+      await _ordersCollection.doc(orderId).update({
+        'isDeleted': false,
+        'restoredAt': FieldValue.serverTimestamp(),
+        'restoredBy': user.uid,
+      });
+
+      // Удаляем заказ из истории
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('orderHistory')
+          .doc(orderId)
+          .delete();
+
+      print('Заказ успешно восстановлен из истории: $orderId');
+    } catch (e) {
+      print('Ошибка при восстановлении заказа из истории: $e');
+      throw e;
+    }
+  }
 } 
