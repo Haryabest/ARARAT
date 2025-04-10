@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Разрешаем доступ к коллекции orders
+    match /orders/{orderId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Разрешаем доступ пользователям к своим документам
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Разрешаем доступ к подколлекции orders для текущего пользователя
+      match /orders/{orderId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+  }
+} 

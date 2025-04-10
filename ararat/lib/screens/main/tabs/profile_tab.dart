@@ -688,10 +688,16 @@ class _ProfileTabState extends State<ProfileTab> {
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => destination),
-          );
+          if (title == 'Мои заказы') {
+            // Используем именованный маршрут для экрана заказов
+            Navigator.of(context).pushNamed('/profile/orders');
+          } else {
+            // Для других экранов используем обычный MaterialPageRoute
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => destination),
+            );
+          }
         },
         borderRadius: BorderRadius.circular(8),
         child: Container(

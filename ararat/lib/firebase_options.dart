@@ -44,25 +44,25 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyDOKLNzHXUTHy4aU2S1dBEk30lGOQ3WHxM',
     appId: '1:301989351145:web:cf8dc2f6ff2b635efc2a78',
     messagingSenderId: '301989351145',
-    projectId: 'arara-efa6f',
-    authDomain: 'arara-efa6f.firebaseapp.com',
-    storageBucket: 'arara-efa6f.firebasestorage.app',
+    projectId: 'ararat-efa6f',
+    authDomain: 'ararat-efa6f.firebaseapp.com',
+    storageBucket: 'ararat-efa6f.appspot.com',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyB3BKbiPQ6_yfD81ND1_WR4TufGvzV1nfE',
     appId: '1:301989351145:android:5f0e99f75c74369efc2a78',
     messagingSenderId: '301989351145',
-    projectId: 'arara-efa6f',
-    storageBucket: 'arara-efa6f.firebasestorage.app',
+    projectId: 'ararat-efa6f',
+    storageBucket: 'ararat-efa6f.appspot.com',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBUVQVCgoebHVU0RepcvyMTNz0Qmk0Bu7Y',
     appId: '1:301989351145:ios:85df4fa2c17ca3aefc2a78',
     messagingSenderId: '301989351145',
-    projectId: 'arara-efa6f',
-    storageBucket: 'arara-efa6f.firebasestorage.app',
+    projectId: 'ararat-efa6f',
+    storageBucket: 'ararat-efa6f.appspot.com',
     iosBundleId: 'com.example.ararat',
   );
 
@@ -70,8 +70,8 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyBUVQVCgoebHVU0RepcvyMTNz0Qmk0Bu7Y',
     appId: '1:301989351145:ios:85df4fa2c17ca3aefc2a78',
     messagingSenderId: '301989351145',
-    projectId: 'arara-efa6f',
-    storageBucket: 'arara-efa6f.firebasestorage.app',
+    projectId: 'ararat-efa6f',
+    storageBucket: 'ararat-efa6f.appspot.com',
     iosBundleId: 'com.example.ararat',
   );
 
@@ -79,9 +79,9 @@ class DefaultFirebaseOptions {
     apiKey: 'AIzaSyDOKLNzHXUTHy4aU2S1dBEk30lGOQ3WHxM',
     appId: '1:301989351145:web:0f2d27532694976ffc2a78',
     messagingSenderId: '301989351145',
-    projectId: 'arara-efa6f',
-    authDomain: 'arara-efa6f.firebaseapp.com',
-    storageBucket: 'arara-efa6f.firebasestorage.app',
+    projectId: 'ararat-efa6f',
+    authDomain: 'ararat-efa6f.firebaseapp.com',
+    storageBucket: 'ararat-efa6f.appspot.com',
   );
 
 }

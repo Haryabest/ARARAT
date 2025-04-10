@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:ararat/screens/registration/registration_screen.dart';
 import 'package:ararat/screens/login/login_screen.dart';
 import 'package:ararat/screens/main/main_screen.dart';
+import 'package:ararat/screens/main/tabs/other_profile_tabs/orders_tab.dart';
 import 'package:ararat/utils/font_loader.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:ararat/screens/product/add_product_screen.dart';
 import 'package:ararat/screens/product/product_list_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,12 +51,66 @@ class MyAppLoader extends StatelessWidget {
   
   Future<void> _initializeApp() async {
     try {
+      print('Инициализация Firebase...');
+      
+      // Инициализируем Firebase с обновленными настройками
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      
+      print('Firebase успешно инициализирован');
+      
+      // Проверяем аутентификацию
+      final auth = FirebaseAuth.instance;
+      final user = auth.currentUser;
+      if (user != null) {
+        print('Пользователь авторизован: ${user.uid}');
+        print('Email: ${user.email}');
+        print('Анонимная авторизация: ${user.isAnonymous}');
+      } else {
+        print('Пользователь не авторизован');
+      }
+      
+      // Проверяем доступ к Firestore
+      try {
+        print('Проверка соединения с Firestore...');
+        final testDoc = await FirebaseFirestore.instance
+            .collection('system')
+            .doc('app_info')
+            .get();
+        
+        if (!testDoc.exists) {
+          // Создаем тестовый документ
+          await FirebaseFirestore.instance
+              .collection('system')
+              .doc('app_info')
+              .set({
+                'appName': 'ARARAT',
+                'version': '1.0.0',
+                'lastStarted': FieldValue.serverTimestamp(),
+              });
+          print('Тестовый документ в Firestore создан');
+        } else {
+          // Обновляем существующий документ
+          await FirebaseFirestore.instance
+              .collection('system')
+              .doc('app_info')
+              .update({
+                'lastStarted': FieldValue.serverTimestamp(),
+              });
+          print('Тестовый документ в Firestore обновлен');
+        }
+        
+        print('Соединение с Firestore установлено');
+      } catch (e) {
+        print('Ошибка при проверке соединения с Firestore: $e');
+      }
+      
+      // Загружаем шрифты
       await FontLoader.loadFonts();
+      print('Шрифты загружены');
     } catch (e) {
-      print('Ошибка инициализации: $e');
+      print('Ошибка инициализации приложения: $e');
       // Продолжаем выполнение даже при ошибке Firebase
     }
   }
@@ -93,6 +150,7 @@ class MyApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/registration': (context) => const RegistrationScreen(),
         '/main': (context) => const MainScreen(),
+        '/profile/orders': (context) => const OrdersTab(),
         '/add_product': (context) => const AddProductScreen(),
         '/product_list': (context) => const ProductListScreen(),
       },

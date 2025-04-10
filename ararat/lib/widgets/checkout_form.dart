@@ -2,15 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:ararat/widgets/custom_form_field.dart';
 import 'package:ararat/screens/map/map_screen.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:flutter/services.dart';
+import 'package:ararat/services/order_service.dart';
+
+// Модель для товара в заказе
+class OrderItem {
+  final String id;
+  final String name;
+  final double price;
+  final int quantity;
+  final String? imageUrl;
+  
+  OrderItem({
+    required this.id, 
+    required this.name, 
+    required this.price, 
+    required this.quantity,
+    this.imageUrl,
+  });
+}
 
 class CheckoutForm extends StatefulWidget {
-  const CheckoutForm({super.key});
+  final List<OrderItem> orderItems;
+  final Function()? onOrderCompleted;
+  
+  const CheckoutForm({
+    super.key, 
+    this.orderItems = const [],
+    this.onOrderCompleted,
+  });
 
   @override
   State<CheckoutForm> createState() => _CheckoutFormState();
 }
 
 class _CheckoutFormState extends State<CheckoutForm> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  
   // Контроллеры для полей ввода
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _entranceController = TextEditingController();
@@ -21,12 +50,47 @@ class _CheckoutFormState extends State<CheckoutForm> {
   final TextEditingController _commentController = TextEditingController();
   
   // Переменные для хранения выбранных значений
-  String _selectedDeliveryType = 'fast'; // fast, slow, scheduled
-  String _selectedPaymentMethod = 'card'; // card, cash, online
-  double _tipAmount = 0.0; // 0.0, 100.0, 200.0, 300.0, 500.0
+  String _selectedDeliveryType = 'standard'; // fast, slow, scheduled
+  String _selectedPaymentMethod = 'cash'; // cash, qr - только два способа оплаты
   bool _leaveAtDoor = false;
   String _selectedAddress = '';
   LatLng? _selectedLocation;
+  bool _isApartment = true; // true - квартира, false - офис
+  
+  // Переменные для выбора времени доставки
+  TimeOfDay? _selectedDeliveryTime;
+  String _deliveryTimeText = 'Выберите удобное время';
+  
+  // Коэффициенты расчета стоимости доставки
+  final Map<String, double> _deliveryFactors = {
+    'fast': 1.5,      // Быстрая доставка: +50% к базовой стоимости
+    'slow': 1.0,      // Стандартная доставка: базовая стоимость
+    'scheduled': 1.2, // Доставка к определенному времени: +20% к базовой стоимости
+  };
+  
+  static const int deliveryTypePickup = 0;
+  static const int deliveryTypeDelivery = 1;
+  
+  // Факторы для расчёта стоимости доставки
+  static const double baseFreeDeliveryThreshold = 2000.0; // Бесплатная доставка от 2000 руб
+  static const double baseDeliveryCost = 300.0; // Базовая стоимость доставки
+  static const double deliveryDistanceFactor = 25.0; // Рублей за километр свыше 5 км
+  
+  // Переменная для отслеживания процесса загрузки
+  bool _isLoading = false;
+  
+  // Получить стоимость доставки на основе типа и общей суммы заказа
+  double getDeliveryCost(double orderTotal) {
+    final baseCost = 250.0; // Базовая стоимость доставки
+    final factor = _deliveryFactors[_selectedDeliveryType] ?? 1.0;
+    
+    // Если сумма заказа больше 3000, доставка бесплатная
+    if (orderTotal > 3000) {
+      return 0.0;
+    }
+    
+    return baseCost * factor;
+  }
   
   // Высота формы (90% от высоты экрана)
   double get _formHeight => MediaQuery.of(context).size.height * 0.9;
@@ -45,14 +109,36 @@ class _CheckoutFormState extends State<CheckoutForm> {
   
   @override
   Widget build(BuildContext context) {
+    print('CheckoutForm.build: начало построения');
+    print('Количество товаров: ${widget.orderItems.length}');
+    
     return Container(
       height: _formHeight,
+      width: double.infinity,
       decoration: const BoxDecoration(
         color: Color(0xFFA99378),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Заголовок формы
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text(
+              'Оформление заказа',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          
           // Индикатор свайпа
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -68,21 +154,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
             ),
           ),
           
-          // Заголовок
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Text(
-              'Оформление заказа',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
-          
-          // Содержимое формы
+          // Содержимое формы - используем Expanded вместе с SingleChildScrollView
           Expanded(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
@@ -170,15 +242,15 @@ class _CheckoutFormState extends State<CheckoutForm> {
                           filled: false,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF2F3036), width: 1.5),
+                            borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF2F3036), width: 1.5),
+                            borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF2F3036), width: 1.5),
+                            borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
                           ),
                           contentPadding: const EdgeInsets.all(16),
                         ),
@@ -204,36 +276,16 @@ class _CheckoutFormState extends State<CheckoutForm> {
                     ),
                     const SizedBox(height: 24),
                     
-                    // Блок чаевых
-                    _buildSectionTitle('Чаевые'),
-                    const SizedBox(height: 16),
-                    
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6C4425),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: _buildTipSelector(),
-                    ),
-                    const SizedBox(height: 32),
+                    // Добавляем общую сумму заказа с учетом доставки и чаевых
+                    _buildTotalAmount(),
                     
                     // Кнопка подтверждения заказа
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
+                    Padding(
+                      padding: const EdgeInsets.all(16),
                       child: ElevatedButton(
-                        onPressed: () {
-                          // Логика подтверждения заказа
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Заказ успешно оформлен!'),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                        },
+                        onPressed: _submitOrder,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF4B260A),
+                          backgroundColor: const Color(0xFF50321B),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -300,9 +352,12 @@ class _CheckoutFormState extends State<CheckoutForm> {
             _buildDeliveryOption(
               'scheduled',
               'Доставка к определенному времени',
-              'Выберите удобное время',
+              _selectedDeliveryTime == null ? 'Выберите удобное время' : 'Время: $_deliveryTimeText',
               'assets/icons/scheduled_delivery.png',
             ),
+            // Поле выбора времени для запланированной доставки
+            if (_selectedDeliveryType == 'scheduled') 
+              _buildTimeSelector(),
           ],
         ),
       ],
@@ -312,6 +367,14 @@ class _CheckoutFormState extends State<CheckoutForm> {
   // Опция доставки
   Widget _buildDeliveryOption(String value, String title, String subtitle, String iconPath) {
     final isSelected = _selectedDeliveryType == value;
+    final factor = _deliveryFactors[value] ?? 1.0;
+    String priceFactor = '';
+    
+    if (factor > 1.0) {
+      priceFactor = ' (+${((factor - 1) * 100).toInt()}%)';
+    } else if (factor < 1.0) {
+      priceFactor = ' (-${((1 - factor) * 100).toInt()}%)';
+    }
     
     return InkWell(
       onTap: () {
@@ -328,7 +391,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
               width: 24,
               height: 24,
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF4B260A) : Colors.white.withOpacity(0.2),
+                color: isSelected ? const Color(0xFF50321B) : Colors.white.withOpacity(0.2),
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -355,7 +418,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
                     ),
                   ),
                   Text(
-                    subtitle,
+                    subtitle + priceFactor,
                     style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 12,
@@ -369,7 +432,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
             if (isSelected)
               const Icon(
                 Icons.check_circle,
-                color: Color(0xFF4B260A),
+                color: Color(0xFF50321B),
                 size: 20,
               ),
           ],
@@ -388,96 +451,409 @@ class _CheckoutFormState extends State<CheckoutForm> {
   
   // Поля для адреса
   Widget _buildAddressFields() {
-    return Padding(
+    return Container(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Кнопка выбора адреса
-          InkWell(
-            onTap: _openMap,
+          Row(
+            children: [
+              Icon(
+                Icons.location_on,
+                color: Colors.white,
+                size: 20,
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Адрес доставки',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+              SizedBox(width: 4),
+              Text(
+                '*',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.redAccent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          GestureDetector(
+            onTap: () async {
+              final selectedLocation = await Navigator.push<LatLng>(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MapScreen(
+                    onAddressSelected: (address, location) {
+                      setState(() {
+                        _selectedLocation = location;
+                        _addressController.text = address;
+                      });
+                    },
+                  ),
+                ),
+              );
+              
+              if (selectedLocation != null) {
+                setState(() {
+                  _selectedLocation = selectedLocation;
+                  _addressController.text = 'Адрес выбран на карте';
+                });
+              }
+            },
             child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
+                color: const Color(0xFF50321B),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: const Color(0xFF2F3036),
+                  color: const Color(0xFF50321B).withOpacity(0.5),
                   width: 1.5,
                 ),
-                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  )
+                ],
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16),
+                  Expanded(
                     child: Text(
-                      _selectedAddress.isEmpty ? 'Выберите адрес' : _selectedAddress,
+                      _addressController.text.isEmpty 
+                          ? 'Выбрать адрес на карте'
+                          : _addressController.text,
                       style: TextStyle(
-                        color: _selectedAddress.isEmpty ? Colors.white.withOpacity(0.5) : Colors.white,
+                        color: _addressController.text.isEmpty 
+                            ? Colors.white.withOpacity(0.7)
+                            : Colors.white,
                         fontFamily: 'Inter',
                         fontSize: 14,
                       ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.only(right: 16),
+                  Container(
+                    padding: EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6C4425),
+                      shape: BoxShape.circle,
+                    ),
                     child: Icon(
-                      Icons.location_on,
+                      Icons.map,
                       color: Colors.white,
+                      size: 16,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           
-          Row(
-            children: [
-              Expanded(
-                child: CustomFormField(
-                  controller: _entranceController,
-                  label: 'Подъезд',
-                  isAuthScreen: true,
-                  labelColor: Colors.white,
-                ),
+          // Разделитель для визуального отделения
+          Container(
+            height: 1,
+            color: Colors.white.withOpacity(0.2),
+            margin: const EdgeInsets.only(bottom: 16),
+          ),
+          
+          // Инструкция для пользователя
+          Container(
+            margin: EdgeInsets.only(bottom: 16),
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Color(0xFF50321B).withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1), 
+                width: 1
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: CustomFormField(
-                  controller: _intercomController,
-                  label: 'Домофон',
-                  isAuthScreen: true,
-                  labelColor: Colors.white,
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.white.withOpacity(0.7), size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Заполните информацию для доставки. Поля отмеченные звездочкой (*) обязательны для заполнения.",
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.8),
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+          ),
+          
+          // Тип помещения: Квартира или Офис
+          _buildApartmentOfficeToggle(),
+          const SizedBox(height: 20),
+          
+          // Подъезд
+          _buildAddressField(
+            controller: _entranceController,
+            label: 'Подъезд',
+            hint: 'Номер подъезда',
+            icon: Icons.door_front_door,
+            keyboardType: TextInputType.number,
+            validator: (value) {
+              if (value != null && value.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(value)) {
+                return 'Только цифры';
+              }
+              return null;
+            },
+            isRequired: false,
+            helperText: 'Укажите номер подъезда',
           ),
           const SizedBox(height: 16),
           
-          Row(
-            children: [
-              Expanded(
-                child: CustomFormField(
-                  controller: _apartmentOfficeController,
-                  label: 'Квартира/офис',
-                  isAuthScreen: true,
-                  labelColor: Colors.white,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: CustomFormField(
-                  controller: _floorController,
-                  label: 'Этаж',
-                  isAuthScreen: true,
-                  labelColor: Colors.white,
-                ),
-              ),
-            ],
+          // Домофон
+          _buildAddressField(
+            controller: _intercomController,
+            label: 'Домофон',
+            hint: 'Код домофона',
+            icon: Icons.dialpad,
+            validator: (value) {
+              return null;
+            },
+            isRequired: false,
+            helperText: 'Код или номер для входа',
+          ),
+          const SizedBox(height: 16),
+          
+          // Квартира/офис
+          _buildAddressField(
+            controller: _apartmentOfficeController,
+            label: _isApartment ? 'Квартира' : 'Офис',
+            hint: _isApartment ? 'Номер квартиры' : 'Номер офиса',
+            icon: _isApartment ? Icons.apartment : Icons.business,
+            validator: (value) {
+              return null;
+            },
+            isRequired: true,
+            helperText: _isApartment ? 'Укажите номер квартиры' : 'Укажите номер офиса',
+          ),
+          const SizedBox(height: 16),
+          
+          // Этаж
+          _buildAddressField(
+            controller: _floorController,
+            label: 'Этаж',
+            hint: 'Номер этажа',
+            icon: Icons.stairs,
+            keyboardType: TextInputType.number,
+            validator: (value) {
+              if (value != null && value.isNotEmpty && !RegExp(r'^[0-9]+$').hasMatch(value)) {
+                return 'Только цифры';
+              }
+              return null;
+            },
+            isRequired: false,
+            helperText: 'На каком этаже находится помещение',
           ),
         ],
+      ),
+    );
+  }
+  
+  // Улучшенное поле для ввода адресных данных
+  Widget _buildAddressField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    bool isRequired = false,
+    String? helperText,
+    TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: Colors.white.withOpacity(0.8), size: 16),
+            SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
+            ),
+            if (isRequired) 
+              Text(
+                ' *',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.redAccent,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF50321B),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0xFF50321B).withOpacity(0.5),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 2,
+                offset: Offset(0, 1),
+              )
+            ],
+          ),
+          child: CustomFormField(
+            hintText: hint,
+            controller: controller,
+            label: '',  // Пустой label, так как мы показываем его отдельно выше
+            keyboardType: keyboardType,
+            validator: validator,
+            // Не используем maxLength здесь
+          ),
+        ),
+        if (helperText != null) 
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 8),
+            child: Text(
+              helperText,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.6),
+                fontFamily: 'Inter',
+                fontSize: 12,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+  
+  // Переключатель Квартира/Офис улучшенный
+  Widget _buildApartmentOfficeToggle() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.home_work,
+              color: Colors.white,
+              size: 18,
+            ),
+            SizedBox(width: 8),
+            Text(
+              'Тип помещения',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              ' *',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Colors.redAccent,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF50321B),
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              )
+            ],
+          ),
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildToggleOption(true, 'Квартира'),
+              _buildToggleOption(false, 'Офис'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // Улучшенная опция переключателя
+  Widget _buildToggleOption(bool isApartment, String label) {
+    final isSelected = _isApartment == isApartment;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isApartment = isApartment;
+          // Обновляем лейбл поля ввода
+          if (_apartmentOfficeController.text.isEmpty) {
+            // Сбрасываем текст, только если поле пустое
+            _apartmentOfficeController.clear();
+          }
+        });
+      },
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 20),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(30),
+          border: isSelected 
+              ? null 
+              : Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isApartment ? Icons.apartment : Icons.business,
+              color: isSelected ? const Color(0xFF50321B) : Colors.white.withOpacity(0.8),
+              size: 16,
+            ),
+            SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? const Color(0xFF50321B) : Colors.white,
+                fontFamily: 'Inter',
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -485,32 +861,86 @@ class _CheckoutFormState extends State<CheckoutForm> {
   // Переключатель "Оставить у двери"
   Widget _buildLeaveAtDoorSwitch() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      margin: const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF6C4425),
+        color: const Color(0xFF50321B),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: const Color(0xFF50321B).withOpacity(0.8),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          )
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'Оставить у двери',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: Colors.white,
-            ),
+          Row(
+            children: [
+              Icon(
+                Icons.door_front_door_outlined,
+                color: Colors.white.withOpacity(0.9),
+                size: 20,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Оставить у двери',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ),
-          Switch(
-            value: _leaveAtDoor,
-            onChanged: (value) {
-              setState(() {
-                _leaveAtDoor = value;
-              });
-            },
-            activeColor: const Color(0xFF4B260A),
-            activeTrackColor: Colors.white.withOpacity(0.3),
+          Container(
+            height: 28,
+            width: 52,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1,
+              ),
+            ),
+            child: Stack(
+              children: [
+                AnimatedContainer(
+                  duration: Duration(milliseconds: 200),
+                  alignment:
+                      _leaveAtDoor ? Alignment.centerRight : Alignment.centerLeft,
+                  padding: EdgeInsets.symmetric(horizontal: 2),
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _leaveAtDoor ? Colors.white : Colors.white.withOpacity(0.3),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        setState(() {
+                          _leaveAtDoor = !_leaveAtDoor;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -522,21 +952,15 @@ class _CheckoutFormState extends State<CheckoutForm> {
     return Column(
       children: [
         _buildPaymentOption(
-          'card',
-          'Картой онлайн',
-          Icons.credit_card,
-        ),
-        _buildDivider(),
-        _buildPaymentOption(
           'cash',
           'Наличными курьеру',
           Icons.payments_outlined,
         ),
         _buildDivider(),
         _buildPaymentOption(
-          'online',
-          'Электронными средствами',
-          Icons.account_balance_wallet_outlined,
+          'qr',
+          'QR кодом',
+          Icons.qr_code,
         ),
       ],
     );
@@ -558,7 +982,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
           children: [
             Icon(
               icon,
-              color: isSelected ? const Color(0xFF4B260A) : Colors.white.withOpacity(0.7),
+              color: isSelected ? const Color(0xFF50321B) : Colors.white.withOpacity(0.7),
               size: 24,
             ),
             const SizedBox(width: 12),
@@ -575,7 +999,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
             if (isSelected)
               const Icon(
                 Icons.check_circle,
-                color: Color(0xFF4B260A),
+                color: Color(0xFF50321B),
                 size: 20,
               ),
           ],
@@ -584,74 +1008,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
     );
   }
   
-  // Выбор суммы чаевых
-  Widget _buildTipSelector() {
-    final tipOptions = [0.0, 100.0, 200.0, 300.0, 500.0];
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF6C4425),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            children: [
-              _buildTipOption(0.0, 'Без чаевых'),
-              _buildDivider(),
-              ...tipOptions.where((tip) => tip > 0).map((tip) {
-                return Column(
-                  children: [
-                    _buildTipOption(tip, '${tip.toStringAsFixed(0)} ₽'),
-                    if (tip < tipOptions.last) _buildDivider(),
-                  ],
-                );
-              }),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-  
-  // Опция чаевых
-  Widget _buildTipOption(double amount, String label) {
-    final isSelected = _tipAmount == amount;
-    
-    return InkWell(
-      onTap: () {
-        setState(() {
-          _tipAmount = amount;
-        });
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 14,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: Colors.white,
-              ),
-            ),
-            if (isSelected)
-              const Icon(
-                Icons.check_circle,
-                color: Color(0xFF4B260A),
-                size: 20,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
+  // Открытие карты для выбора адреса
   Future<void> _openMap() async {
     try {
       await Navigator.push(
@@ -673,6 +1030,384 @@ class _CheckoutFormState extends State<CheckoutForm> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Ошибка при открытии карты: $e'),
+          ),
+        );
+      }
+    }
+  }
+  
+  // Общая сумма заказа
+  Widget _buildTotalAmount() {
+    final orderItems = widget.orderItems;
+    double subtotal = 0.0;
+    
+    // Расчет стоимости товаров
+    for (var item in orderItems) {
+      subtotal += (item.price * item.quantity);
+    }
+    
+    // Расчет стоимости доставки
+    final deliveryCost = getDeliveryCost(subtotal);
+    
+    // Общая сумма с учетом доставки и чаевых
+    final total = subtotal + deliveryCost;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF50321B),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          _buildTotalRow('Сумма товаров', '${subtotal.toStringAsFixed(0)} ₽'),
+          const SizedBox(height: 8),
+          _buildTotalRow(
+            'Доставка', 
+            deliveryCost > 0 ? '${deliveryCost.toStringAsFixed(0)} ₽' : 'Бесплатно',
+            deliveryCost > 0 ? null : Colors.green,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Divider(color: Colors.white24),
+          ),
+          _buildTotalRow(
+            'Итого', 
+            '${total.toStringAsFixed(0)} ₽',
+            const Color(0xFFA99378),
+            FontWeight.bold,
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Строка в разделе итоговой суммы
+  Widget _buildTotalRow(String label, String value, [Color? valueColor, FontWeight fontWeight = FontWeight.normal]) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            color: Colors.white,
+            fontWeight: fontWeight,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            color: valueColor ?? Colors.white,
+            fontWeight: fontWeight,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Поле выбора времени доставки
+  Widget _buildTimeSelector() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: InkWell(
+        onTap: _selectTime,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: const Color(0xFF50321B),
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(8),
+            color: const Color(0xFF50321B).withOpacity(0.2),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                _selectedDeliveryTime == null 
+                    ? 'Выберите время доставки'
+                    : 'Доставка в $_deliveryTimeText',
+                style: TextStyle(
+                  color: _selectedDeliveryTime == null 
+                      ? Colors.white.withOpacity(0.7)
+                      : Colors.white,
+                  fontFamily: 'Inter',
+                  fontSize: 14,
+                ),
+              ),
+              const Icon(
+                Icons.access_time,
+                color: Colors.white,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  // Показать диалоговое окно выбора времени
+  Future<void> _selectTime() async {
+    final currentTime = TimeOfDay.now();
+    
+    final TimeOfDay? pickedTime = await showTimePicker(
+      context: context,
+      initialTime: _selectedDeliveryTime ?? currentTime,
+      builder: (BuildContext context, Widget? child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF50321B),
+              onPrimary: Colors.white,
+              surface: Color(0xFF6C4425),
+              onSurface: Colors.white,
+            ),
+            dialogBackgroundColor: const Color(0xFFA99378),
+          ),
+          child: child!,
+        );
+      },
+    );
+    
+    if (pickedTime != null && mounted) {
+      // Проверяем, не раньше ли выбранное время, чем текущее
+      final bool isTimeValid = pickedTime.hour > currentTime.hour || 
+                             (pickedTime.hour == currentTime.hour && 
+                              pickedTime.minute >= currentTime.minute);
+      
+      if (!isTimeValid) {
+        // Показываем ошибку, если выбрано время раньше текущего
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Невозможно выбрать время раньше текущего'),
+            backgroundColor: Color(0xFF6C4425),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+      
+      setState(() {
+        _selectedDeliveryTime = pickedTime;
+        
+        // Форматируем время в строку
+        final hour = pickedTime.hour.toString().padLeft(2, '0');
+        final minute = pickedTime.minute.toString().padLeft(2, '0');
+        _deliveryTimeText = '$hour:$minute';
+      });
+    }
+  }
+
+  // Метод отправки заказа
+  Future<void> _submitOrder() async {
+    // Предотвращаем повторное нажатие кнопки во время обработки
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    
+    // Проверяем все обязательные поля
+    bool hasErrors = false;
+
+    // Проверка адреса
+    if (_addressController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Необходимо указать адрес доставки'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      hasErrors = true;
+    }
+    
+    // Проверка телефона
+    else if (_phoneController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Необходимо указать номер телефона'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      hasErrors = true;
+    }
+    
+    // Проверка квартиры/офиса
+    else if (_apartmentOfficeController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Необходимо указать номер ${_isApartment ? 'квартиры' : 'офиса'}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      hasErrors = true;
+    }
+    
+    // Проверка корзины
+    else if (widget.orderItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ваша корзина пуста. Добавьте товары перед оформлением заказа'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      hasErrors = true;
+    }
+    
+    // Если есть ошибки, прекращаем оформление заказа
+    if (hasErrors) {
+      setState(() => _isLoading = false);
+      return;
+    }
+    
+    // Собираем данные о адресе доставки
+    final deliveryAddress = {
+      'address': _addressController.text,
+      'entrance': _entranceController.text,
+      'intercom': _intercomController.text,
+      'apartmentOffice': _apartmentOfficeController.text,
+      'floor': _floorController.text,
+      'isApartment': _isApartment,
+      'fullAddress': '${_addressController.text}, ${_isApartment ? 'кв.' : 'офис'} ${_apartmentOfficeController.text}${_entranceController.text.isNotEmpty ? ', подъезд ${_entranceController.text}' : ''}${_floorController.text.isNotEmpty ? ', этаж ${_floorController.text}' : ''}',
+      'location': _selectedLocation != null 
+          ? {'latitude': _selectedLocation!.latitude, 'longitude': _selectedLocation!.longitude} 
+          : null,
+    };
+    
+    // Создаем форматированный комментарий для заказа, если он есть
+    String? formattedComment;
+    if (_commentController.text.isNotEmpty) {
+      formattedComment = 'Комментарий к заказу: ${_commentController.text}';
+      if (_leaveAtDoor) {
+        formattedComment += '\nОставить у двери';
+      }
+    } else if (_leaveAtDoor) {
+      formattedComment = 'Оставить у двери';
+    }
+    
+    // Создаем карту с дополнительными метаданными о заказе
+    final Map<String, dynamic> orderMetadata = {
+      'deviceInfo': {
+        'platform': 'flutter',
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      },
+      'uiVersion': '1.0.0',
+      'clientTimestamp': DateTime.now().toIso8601String(),
+    };
+    
+    // Показываем индикатор загрузки
+    BuildContext? dialogContext;
+    
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          dialogContext = context;
+          return const Center(
+            child: CircularProgressIndicator(
+              color: Colors.white,
+            ),
+          );
+        },
+      );
+    }
+    
+    try {
+      // Инициализируем сервис заказов
+      final orderService = OrderService();
+      
+      // Расчет стоимости товаров
+      double subtotal = 0.0;
+      for (var item in widget.orderItems) {
+        subtotal += (item.price * item.quantity);
+      }
+      
+      // Расчет стоимости доставки
+      final deliveryCost = getDeliveryCost(subtotal);
+      
+      // Создаем заказ в Firebase
+      final orderId = await orderService.createOrder(
+        items: widget.orderItems,
+        subtotal: subtotal,
+        deliveryCost: deliveryCost,
+        paymentMethod: _selectedPaymentMethod,
+        deliveryType: _selectedDeliveryType,
+        deliveryAddress: deliveryAddress,
+        phoneNumber: _phoneController.text,
+        comment: formattedComment,
+        leaveAtDoor: _leaveAtDoor,
+        metadata: orderMetadata,
+      );
+      
+      // Очищаем корзину после успешного создания заказа
+      if (widget.onOrderCompleted != null) {
+        widget.onOrderCompleted!();
+      }
+      
+      // Закрываем диалог загрузки, если он был показан
+      if (dialogContext != null && mounted) {
+        Navigator.pop(dialogContext!);
+      }
+      
+      // Сбрасываем состояние загрузки
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      
+      // Закрываем форму оформления заказа и возвращаемся на главный экран
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      
+      // Показываем сообщение об успешном оформлении заказа, если контекст еще валиден
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Заказ #${orderId.substring(0, 8)} успешно оформлен!'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.green,
+            action: SnackBarAction(
+              label: 'Мои заказы',
+              textColor: Colors.white,
+              onPressed: () {
+                // Используем Future.delayed, чтобы дать SnackBar закрыться
+                // перед навигацией и предотвратить ошибку с контекстом
+                Future.delayed(Duration.zero, () {
+                  if (mounted) {
+                    // Используем BuildContext с корня навигатора для предотвращения ошибок
+                    Navigator.of(context, rootNavigator: true).pushNamed('/profile/orders');
+                  }
+                });
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Ошибка при оформлении заказа: $e');
+      
+      // Закрываем диалог загрузки, если он был показан
+      if (dialogContext != null && mounted) {
+        Navigator.pop(dialogContext!);
+      }
+      
+      // Сбрасываем состояние загрузки
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+      
+      // Показываем сообщение об ошибке, если контекст еще валиден
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при оформлении заказа: ${e.toString()}'),
+            backgroundColor: Colors.red,
           ),
         );
       }

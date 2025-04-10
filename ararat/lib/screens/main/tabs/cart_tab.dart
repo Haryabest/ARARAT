@@ -779,11 +779,121 @@ class _CartTabState extends State<CartTab> with TickerProviderStateMixin {
 
   // Метод для показа формы оформления заказа
   void showCheckoutForm(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const CheckoutForm(),
+    try {
+      print('Начинаем обработку заказа');
+      final cartItems = _cartManager.cartNotifier.value;
+      
+      if (cartItems.isEmpty) {
+        print('Корзина пуста');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Добавьте товары в корзину перед оформлением заказа'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+      
+      // Преобразуем товары корзины в объекты CartItem
+      final List<CartItem> items = [];
+      
+      for (final mapItem in cartItems) {
+        try {
+          final item = CartItem.fromMap(mapItem);
+          items.add(item);
+        } catch (e) {
+          print('Ошибка при преобразовании товара: $e');
+          // Продолжаем обработку остальных товаров
+        }
+      }
+      
+      if (items.isEmpty) {
+        print('Не удалось преобразовать ни один товар');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Не удалось подготовить товары для оформления'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+      
+      // Преобразуем CartItem в OrderItem для передачи в форму
+      final orderItems = items.map((item) => item.toOrderItem()).toList();
+      
+      print('Подготовлено товаров: ${orderItems.length}');
+      
+      // Отображаем форму оформления заказа
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => CheckoutForm(
+          orderItems: orderItems,
+          onOrderCompleted: () {
+            // Очищаем корзину после успешного оформления заказа
+            _cartManager.clearCart();
+          },
+        ),
+      );
+      
+    } catch (e) {
+      print('Ошибка при оформлении заказа: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Произошла ошибка при оформлении заказа: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+// Класс для товара в корзине, улучшенный вариант
+class CartItem {
+  final int id;
+  final String name;
+  final double price;
+  final int quantity;
+  final String? weight;
+  final String? imageUrl;
+  
+  CartItem({
+    required this.id,
+    required this.name,
+    required this.price,
+    required this.quantity,
+    this.weight,
+    this.imageUrl,
+  });
+  
+  // Конвертация из Map в CartItem
+  factory CartItem.fromMap(Map<String, dynamic> map) {
+    double price;
+    if (map['price'] is int) {
+      price = (map['price'] as int).toDouble();
+    } else {
+      price = map['price'] as double;
+    }
+    
+    return CartItem(
+      id: map['id'] as int,
+      name: map['name'] as String,
+      price: price,
+      quantity: map['quantity'] as int,
+      weight: map['weight'] as String?,
+      imageUrl: map['imageUrl'] as String?,
+    );
+  }
+  
+  // Конвертация из CartItem в OrderItem
+  OrderItem toOrderItem() {
+    return OrderItem(
+      id: id.toString(),
+      name: name,
+      price: price,
+      quantity: quantity,
+      imageUrl: imageUrl,
     );
   }
 } 
