@@ -124,4 +124,29 @@ class AuthService {
   String getFirebaseConsoleUrl() {
     return 'https://console.firebase.google.com/';
   }
+  
+  // Обновление пароля пользователя
+  Future<void> updatePassword(String newPassword) async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      await user.updatePassword(newPassword.trim());
+    }
+  }
+  
+  // Обновление данных пользователя
+  Future<void> updateUserData(Map<String, dynamic> data) async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      // Обновляем displayName в Firebase Auth, если он есть в данных
+      if (data.containsKey('displayName')) {
+        await user.updateDisplayName(data['displayName']);
+      }
+      
+      // Обновляем данные в Firestore
+      await _saveUserDataToFirestore(user.uid, {
+        ...data,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
 } 

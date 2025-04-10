@@ -5,6 +5,9 @@ import 'package:ararat/screens/main/tabs/other_profile_tabs/payment_methods_tab.
 import 'package:ararat/screens/main/tabs/other_profile_tabs/notifications_tab.dart';
 import 'package:ararat/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -18,6 +21,15 @@ class _ProfileTabState extends State<ProfileTab> {
   String _displayName = '';
   String _email = '';
   bool _isLoading = true;
+  final TextEditingController _loginController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
+  bool _isUserDataLoading = false;
+  bool _isPasswordHidden = true;
+  bool _isConfirmPasswordHidden = true;
+  File? _imageFile;
+  bool _isUploadingImage = false;
+  String? _photoURL;
 
   @override
   void initState() {
@@ -47,6 +59,10 @@ class _ProfileTabState extends State<ProfileTab> {
         if (userData['displayName'] != null) {
           displayName = userData['displayName'];
         }
+        // Получаем URL фото профиля
+        if (userData['photoURL'] != null) {
+          _photoURL = userData['photoURL'];
+        }
       }
 
       setState(() {
@@ -58,6 +74,7 @@ class _ProfileTabState extends State<ProfileTab> {
       setState(() {
         _displayName = 'Не авторизован';
         _email = '';
+        _photoURL = null;
         _isLoading = false;
       });
     }
@@ -162,6 +179,326 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
+  // Функция для выбора изображения из галереи
+  Future<void> _pickImage() async {
+    try {
+      final ImagePicker _picker = ImagePicker();
+      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      
+      if (pickedFile != null) {
+        setState(() {
+          _imageFile = File(pickedFile.path);
+          _isUploadingImage = true;
+        });
+        
+        await _uploadImageToFirebase();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ошибка при выборе изображения')),
+      );
+    }
+  }
+  
+  // Загрузка изображения в Firebase Storage
+  Future<void> _uploadImageToFirebase() async {
+    try {
+      final User? user = _authService.currentUser;
+      if (user == null || _imageFile == null) return;
+      
+      final storageRef = firebase_storage.FirebaseStorage.instance
+          .ref()
+          .child('profile_images')
+          .child('${user.uid}.jpg');
+      
+      await storageRef.putFile(_imageFile!);
+      final String downloadUrl = await storageRef.getDownloadURL();
+      
+      // Обновляем URL фото в Firestore
+      await _authService.updateUserData({'photoURL': downloadUrl});
+      
+      // Обновляем данные пользователя
+      await _loadUserData();
+      
+      setState(() {
+        _isUploadingImage = false;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Фото профиля обновлено')),
+      );
+    } catch (e) {
+      setState(() {
+        _isUploadingImage = false;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при загрузке изображения: ${e.toString()}')),
+      );
+    }
+  }
+  
+  // Диалог изменения логина и пароля
+  void _showEditUserDataDialog() {
+    _loginController.text = _displayName;
+    _passwordController.clear();
+    _confirmPasswordController.clear();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFFF8F2E9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              title: const Text(
+                'Изменение данных',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF50321B),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: _loginController,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        color: Color(0xFF50321B),
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Логин',
+                        labelStyle: const TextStyle(
+                          fontFamily: 'Inter',
+                          color: Color(0xFF8C7963),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF50321B)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: _isPasswordHidden,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        color: Color(0xFF50321B),
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Новый пароль',
+                        labelStyle: const TextStyle(
+                          fontFamily: 'Inter',
+                          color: Color(0xFF8C7963),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF50321B)),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordHidden 
+                                ? Icons.visibility_off 
+                                : Icons.visibility,
+                            color: const Color(0xFF50321B),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordHidden = !_isPasswordHidden;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _confirmPasswordController,
+                      obscureText: _isConfirmPasswordHidden,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        color: Color(0xFF50321B),
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Подтверждение пароля',
+                        labelStyle: const TextStyle(
+                          fontFamily: 'Inter',
+                          color: Color(0xFF8C7963),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF50321B)),
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isConfirmPasswordHidden 
+                                ? Icons.visibility_off 
+                                : Icons.visibility,
+                            color: const Color(0xFF50321B),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isConfirmPasswordHidden = !_isConfirmPasswordHidden;
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFF50321B),
+                      ),
+                      child: const Text(
+                        'Отмена',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF50321B),
+                        ),
+                      ),
+                    ),
+                    _isUserDataLoading
+                        ? const CircularProgressIndicator(
+                            color: Color(0xFF50321B),
+                            strokeWidth: 3,
+                          )
+                        : TextButton(
+                            onPressed: _saveUserData,
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF50321B),
+                            ),
+                            child: const Text(
+                              'Сохранить',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF50321B),
+                              ),
+                            ),
+                          ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+  
+  // Сохранение данных пользователя
+  void _saveUserData() async {
+    // Проверка на пустое поле логина
+    if (_loginController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Логин не может быть пустым')),
+      );
+      return;
+    }
+    
+    // Проверка соответствия паролей, если пароль введен
+    if (_passwordController.text.isNotEmpty && 
+        _passwordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Пароли не совпадают')),
+      );
+      return;
+    }
+    
+    // Проверка минимальной длины пароля
+    if (_passwordController.text.isNotEmpty && _passwordController.text.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Пароль должен содержать минимум 6 символов')),
+      );
+      return;
+    }
+    
+    // Начало процесса сохранения
+    setState(() {
+      _isUserDataLoading = true;
+    });
+    
+    try {
+      // Обновление логина
+      await _authService.updateUserData({
+        'displayName': _loginController.text.trim(),
+      });
+      
+      // Обновление пароля, если он был введен
+      if (_passwordController.text.isNotEmpty) {
+        await _authService.updatePassword(_passwordController.text);
+      }
+      
+      // Перезагрузка данных пользователя
+      await _loadUserData();
+      
+      setState(() {
+        _isUserDataLoading = false;
+      });
+      
+      Navigator.pop(context); // Закрываем диалог
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Данные успешно обновлены')),
+      );
+    } catch (e) {
+      setState(() {
+        _isUserDataLoading = false;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при обновлении данных: ${e.toString()}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -188,75 +525,136 @@ class _ProfileTabState extends State<ProfileTab> {
                 ),
                 child: Row(
                   children: [
-                    Container(
-                      width: 70,
-                      height: 70,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE0D5C9),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFF50321B),
-                          width: 2,
+                    InkWell(
+                      onTap: _isLoading ? null : _pickImage,
+                      borderRadius: BorderRadius.circular(35),
+                      child: Container(
+                        width: 70,
+                        height: 70,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE0D5C9),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xFF50321B),
+                            width: 2,
+                          ),
                         ),
-                      ),
-                      child: _isLoading
-                          ? const Center(
-                              child: SizedBox(
-                                width: 25,
-                                height: 25,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF50321B),
+                        child: _isLoading
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 25,
+                                  height: 25,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF50321B),
+                                  ),
                                 ),
+                              )
+                            : Stack(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 35,
+                                    backgroundColor: Colors.grey[300],
+                                    backgroundImage: _isLoading 
+                                        ? null 
+                                        : _imageFile != null
+                                            ? FileImage(_imageFile!)
+                                            : _photoURL != null
+                                                ? NetworkImage(_photoURL!) as ImageProvider<Object>
+                                                : null,
+                                    child: _isLoading || (_imageFile == null && _photoURL == null)
+                                        ? const Icon(
+                                            Icons.person,
+                                            size: 35,
+                                            color: Colors.grey,
+                                          )
+                                        : null,
+                                  ),
+                                  if (_isUploadingImage)
+                                    const Center(
+                                      child: SizedBox(
+                                        width: 25,
+                                        height: 25,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFF50321B),
+                                        ),
+                                      ),
+                                    ),
+                                  Positioned(
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF50321B),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.camera_alt,
+                                        size: 14,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            )
-                          : const Center(
-                              child: Icon(
-                                Icons.person,
-                                size: 35,
-                                color: Color(0xFF50321B),
-                              ),
-                            ),
+                      ),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: _isLoading
-                          ? const Center(
-                              child: SizedBox(
-                                width: 15,
-                                height: 15,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF50321B),
-                                ),
-                              ),
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _displayName,
-                                  style: const TextStyle(
-                                    fontFamily: 'Inter',
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
+                      child: InkWell(
+                        onTap: _isLoading ? null : _showEditUserDataDialog,
+                        borderRadius: BorderRadius.circular(8),
+                        child: _isLoading
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
                                     color: Color(0xFF50321B),
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _email,
-                                  style: const TextStyle(
-                                    fontFamily: 'Inter',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w400,
-                                    color: Color(0xFF838383),
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          _displayName,
+                                          style: const TextStyle(
+                                            fontFamily: 'Inter',
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF50321B),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.edit,
+                                        size: 16,
+                                        color: Color(0xFF50321B),
+                                      ),
+                                    ],
                                   ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _email,
+                                    style: const TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                      color: Color(0xFF838383),
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                      ),
                     ),
                   ],
                 ),
@@ -389,5 +787,13 @@ class _ProfileTabState extends State<ProfileTab> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _loginController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 } 
