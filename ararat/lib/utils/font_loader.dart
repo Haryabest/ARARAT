@@ -2,9 +2,9 @@ import 'package:flutter/services.dart';
 
 class FontLoader {
   static Future<void> loadFonts() async {
-    await rootBundle.load('fonts/Inter_18pt-Regular.ttf');
-    await rootBundle.load('fonts/Inter_18pt-Medium.ttf');
-    await rootBundle.load('fonts/Inter_18pt-SemiBold.ttf');
-    await rootBundle.load('fonts/Inter_18pt-Bold.ttf');
+    // Не нужно вручную загружать шрифты, так как они уже объявлены в pubspec.yaml
+    // Flutter автоматически загрузит их при запуске приложения
+    // Ждем немного для инициализации
+    await Future.delayed(Duration(milliseconds: 100));
   }
 } 

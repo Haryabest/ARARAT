@@ -16,7 +16,7 @@ class DeliveryAddressesTab extends StatefulWidget {
 
 class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
   final List<Address> _addresses = [];
-  MapController _mapController = MapController();
+  final MapController _mapController = MapController();
   Position? _currentPosition;
   LatLng? _selectedLocation;
   String _selectedAddress = '';

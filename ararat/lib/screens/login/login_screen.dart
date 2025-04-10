@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ararat/services/auth_service.dart';
+import 'package:ararat/screens/main/main_screen.dart';
 import 'package:ararat/core/theme/app_typography.dart';
+import 'package:ararat/screens/registration/registration_screen.dart';
 import 'package:ararat/widgets/custom_form_field.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -13,12 +17,75 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  
+  bool _isLoading = false;
+  String _errorMessage = '';
+  
+  final _authService = AuthService();
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+  
+  void _resetError() {
+    setState(() {
+      _errorMessage = '';
+    });
+  }
+
+  Future<void> _login() async {
+    _resetError();
+    
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      try {
+        final email = _emailController.text.trim();
+        final password = _passwordController.text.trim();
+        
+        // Вход с email и паролем
+        await _authService.signInWithEmailAndPassword(email, password);
+        
+        if (mounted) {
+          // Переход на главный экран
+          Navigator.pushReplacementNamed(context, '/main');
+        }
+      } on FirebaseAuthException catch (e) {
+        String message;
+        
+        switch (e.code) {
+          case 'user-not-found':
+            message = 'Пользователь с таким email не найден';
+            break;
+          case 'wrong-password':
+            message = 'Неверный пароль';
+            break;
+          case 'invalid-email':
+            message = 'Некорректный email';
+            break;
+          case 'user-disabled':
+            message = 'Аккаунт заблокирован';
+            break;
+          default:
+            message = 'Ошибка входа: ${e.message}';
+        }
+        
+        setState(() {
+          _errorMessage = message;
+          _isLoading = false;
+        });
+      } catch (e) {
+        setState(() {
+          _errorMessage = 'Ошибка: $e';
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -30,199 +97,144 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: backgroundColor,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 36.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 120),
-              const Text(
-                'ЛОГО ARARAT',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  package: null,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF2F3036),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 80),
-              
-              // Логин/Почта поле
-              CustomFormField(
-                controller: _emailController,
-                label: 'Логин/Почта',
-                isAuthScreen: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Обязательное поле';
-                  }
-                  if (RegExp(r'[а-яА-ЯёЁ]').hasMatch(value)) {
-                    return 'Русские символы не разрешены';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              
-              // Пароль поле
-              CustomFormField(
-                controller: _passwordController,
-                label: 'Пароль',
-                obscureText: true,
-                isAuthScreen: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Обязательное поле';
-                  }
-                  if (RegExp(r'[а-яА-ЯёЁ]').hasMatch(value)) {
-                    return 'Русские символы не разрешены';
-                  }
-                  return null;
-                },
-              ),
-              
-              // Забыли пароль (с отступом вниз)
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: GestureDetector(
-                  onTap: () {
-                    // Обработка нажатия "Забыли пароль?"
-                  },
-                  behavior: HitTestBehavior.opaque,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 4.0),
-                    child: Text(
-                      'Забыли пароль?',
-                      style: AppTypography.forgotPassword,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              // Кнопка Войти
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState?.validate() ?? false) {
-                    // Переход на главный экран после успешной авторизации
-                    Navigator.pushReplacementNamed(context, '/main');
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: buttonColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  elevation: 0,
-                  minimumSize: const Size(double.infinity, 54),
-                ),
-                child: const Text(
-                  'Войти',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              
-              // Нет аккаунта
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 36.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const SizedBox(height: 80),
                   const Text(
-                    'Нет аккаунта? ',
-                    style: AppTypography.smallText,
+                    'ЛОГО ARARAT',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      package: null,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF2F3036),
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.pushReplacementNamed(context, '/registration');
+                  const SizedBox(height: 60),
+                  
+                  // Email поле
+                  CustomFormField(
+                    controller: _emailController,
+                    label: 'Email',
+                    isAuthScreen: true,
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Обязательное поле';
+                      }
+                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                        return 'Пожалуйста, введите корректный email';
+                      }
+                      return null;
                     },
-                    child: const Text(
-                      'Зарегистрироваться',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF50321B),
-                        decoration: TextDecoration.underline,
-                        decorationColor: Color(0xFF50321B),
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Пароль поле
+                  CustomFormField(
+                    controller: _passwordController,
+                    label: 'Пароль',
+                    obscureText: true,
+                    isAuthScreen: true,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Обязательное поле';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  
+                  // Сообщение об ошибке
+                  if (_errorMessage.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        _errorMessage,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              
-              // Разделитель
-              const SizedBox(height: 40),
-              const Row(
-                children: [
-                  Expanded(
-                    child: Divider(
-                      color: Color(0xFF000000),
-                      thickness: 1,
-                    ),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Войти с помощью',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w400,
-                        color: Color(0xFF000000),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Кнопка Войти
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _login,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: buttonColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
                       ),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      elevation: 0,
+                      minimumSize: const Size(double.infinity, 54),
                     ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Войти',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
-                  Expanded(
-                    child: Divider(
-                      color: Color(0xFF000000),
-                      thickness: 1,
-                    ),
+                  
+                  // Нет аккаунта? Зарегистрироваться
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Нет аккаунта? ',
+                        style: AppTypography.smallText,
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const RegistrationScreen()),
+                          );
+                        },
+                        child: const Text(
+                          'Зарегистрироваться',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF50321B),
+                            decoration: TextDecoration.underline,
+                            decorationColor: Color(0xFF50321B),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              
-              // Социальные кнопки
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _socialButton('гугл', const Color(0xFF2E3139)),
-                  _socialButton('эпл', const Color(0xFF2E3139)),
-                  _socialButton('плей\nмаркет', const Color(0xFF2E3139)),
-                ],
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
-  
-  Widget _socialButton(String text, Color color) {
-    return Container(
-      height: 42,
-      width: 80,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Center(
-        child: Text(
-          text,
-          style: AppTypography.smallText.copyWith(
-            color: Colors.white,
-          ),
-          textAlign: TextAlign.center,
         ),
       ),
     );

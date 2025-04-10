@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "756793988940",
-    "project_id": "red-reference-434715-m9",
-    "storage_bucket": "red-reference-434715-m9.firebasestorage.app"
+    "project_number": "188240394333",
+    "project_id": "ararat-f83d7",
+    "storage_bucket": "ararat-f83d7.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:756793988940:android:86d098453935339731a1e9",
+        "mobilesdk_app_id": "1:188240394333:android:31c73c8427327675a0b5b4",
         "android_client_info": {
           "package_name": "com.example.ararat"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAQxPl-IcdpBBdD1-xoks3l302KqXi1JSk"
+          "current_key": "AIzaSyB4mGUm298mlk1bzsngl73rhOstltI86LA"
         }
       ],
       "services": {

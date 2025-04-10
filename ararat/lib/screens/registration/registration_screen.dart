@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:ararat/core/theme/app_typography.dart';
 import 'package:ararat/widgets/custom_form_field.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ararat/utils/firebase_error_translator.dart';
+import 'package:ararat/services/auth_service.dart';
+import 'package:ararat/screens/main/main_screen.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -14,6 +18,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _loginController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  
+  bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  bool _isYandexLoading = false;
+  String? _errorMessage;
+  
+  final _authService = AuthService();
 
   @override
   void dispose() {
@@ -21,6 +32,45 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+  
+  Future<void> _register() async {
+    if (_formKey.currentState!.validate()) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+      
+      try {
+        // Создаем пользователя в Firebase
+        final userCredential = await _authService.registerWithEmailAndPassword(
+          _emailController.text,
+          _passwordController.text,
+        );
+        
+        // Добавляем отображаемое имя (логин)
+        await _authService.updateDisplayName(_loginController.text);
+        
+        // Переход на главный экран после успешной регистрации
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/main');
+        }
+      } on FirebaseAuthException catch (e) {
+        setState(() {
+          _errorMessage = FirebaseErrorTranslator.getErrorMessage(e);
+        });
+      } catch (e) {
+        setState(() {
+          _errorMessage = FirebaseErrorTranslator.getGeneralErrorMessage(e);
+        });
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    }
   }
 
   @override
@@ -64,7 +114,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                         return 'Обязательное поле';
                       }
                       if (RegExp(r'[а-яА-ЯёЁ]').hasMatch(value)) {
-                        return 'Русские символы не разрешены';
+                        return 'Используйте латинские буквы';
                       }
                       return null;
                     },
@@ -110,16 +160,27 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 12),
+                  
+                  // Сообщение об ошибке
+                  if (_errorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 14,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  
+                  const SizedBox(height: 20),
                   
                   // Кнопка Зарегистрироваться
                   ElevatedButton(
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        // Переход на главный экран после успешной регистрации
-                        Navigator.pushReplacementNamed(context, '/main');
-                      }
-                    },
+                    onPressed: _isLoading ? null : _register,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: buttonColor,
                       foregroundColor: Colors.white,
@@ -130,15 +191,24 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       elevation: 0,
                       minimumSize: const Size(double.infinity, 54),
                     ),
-                    child: const Text(
-                      'Зарегистрироваться',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Зарегистрироваться',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                   
                   // Есть аккаунт? Войти
@@ -152,7 +222,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
                       GestureDetector(
                         onTap: () {
-                          Navigator.pushReplacementNamed(context, '/login');
+                          Navigator.pop(context);
                         },
                         child: const Text(
                           'Войти',
@@ -170,12 +240,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   ),
                   
                   // Разделитель
-                  const SizedBox(height: 40),
-                  const Row(
-                    children: [
+                  const SizedBox(height: 24),
+                  Row(
+                    children: const [
                       Expanded(
                         child: Divider(
-                          color: Color(0xFF000000),
+                          color: Color(0xFFBDBDBD),
                           thickness: 1,
                         ),
                       ),
@@ -186,14 +256,13 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                           style: TextStyle(
                             fontFamily: 'Inter',
                             fontSize: 12,
-                            fontWeight: FontWeight.w400,
-                            color: Color(0xFF000000),
+                            color: Color(0xFF9E9E9E),
                           ),
                         ),
                       ),
                       Expanded(
                         child: Divider(
-                          color: Color(0xFF000000),
+                          color: Color(0xFFBDBDBD),
                           thickness: 1,
                         ),
                       ),
@@ -201,16 +270,37 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   ),
                   
                   // Социальные кнопки
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _socialButton('гугл', const Color(0xFF2E3139)),
-                      _socialButton('эпл', const Color(0xFF2E3139)),
-                      _socialButton('плей\nмаркет', const Color(0xFF2E3139)),
+                      // Google
+                      _buildSocialButton(
+                        label: 'гугл',
+                        onPressed: () {
+                          // В данный момент не функционирует
+                        },
+                        isLoading: _isGoogleLoading,
+                      ),
+                      
+                      // Apple
+                      _buildSocialButton(
+                        label: 'эпл',
+                        onPressed: () {
+                          // В данный момент не функционирует
+                        },
+                      ),
+                      
+                      // Play Market
+                      _buildSocialButton(
+                        label: 'плей маркет',
+                        onPressed: () {
+                          // В данный момент не функционирует
+                        },
+                        isLoading: _isYandexLoading,
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -220,26 +310,40 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
   }
   
-  Widget _socialButton(String text, Color color) {
-    return Container(
-      height: 42,
-      width: 80,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Center(
-        child: Text(
-          text,
-          style: const TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: Colors.white,
-          ),
-          textAlign: TextAlign.center,
+  Widget _buildSocialButton({
+    required String label,
+    required VoidCallback onPressed,
+    bool isLoading = false,
+  }) {
+    return ElevatedButton(
+      onPressed: isLoading ? null : onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF242731),
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
         ),
+        minimumSize: const Size(80, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       ),
+      child: isLoading 
+          ? const SizedBox(
+              height: 16,
+              width: 16,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
+            )
+          : Text(
+              label,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
+            ),
     );
   }
 } 

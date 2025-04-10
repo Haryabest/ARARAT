@@ -8,13 +8,55 @@ import 'firebase_options.dart';
 import 'package:ararat/screens/product/add_product_screen.dart';
 import 'package:ararat/screens/product/product_list_screen.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  await FontLoader.loadFonts();
-  runApp(const MyApp());
+  runApp(const MyAppLoader());
+}
+
+class MyAppLoader extends StatelessWidget {
+  const MyAppLoader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ARARAT',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF50321B)),
+        useMaterial3: true,
+      ),
+      home: FutureBuilder(
+        future: _initializeApp(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done) {
+            return const MyApp();
+          }
+          
+          // Пока идет загрузка, показываем индикатор
+          return const Scaffold(
+            backgroundColor: Color(0xFFFAF6F1),
+            body: Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF50321B),
+              ),
+            ),
+          );
+        },
+      ),
+      debugShowCheckedModeBanner: false,
+    );
+  }
+  
+  Future<void> _initializeApp() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      await FontLoader.loadFonts();
+    } catch (e) {
+      print('Ошибка инициализации: $e');
+      // Продолжаем выполнение даже при ошибке Firebase
+    }
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -46,10 +88,10 @@ class MyApp extends StatelessWidget {
           labelSmall: TextStyle(fontFamily: 'Inter'),
         ),
       ),
-      initialRoute: '/registration',
+      initialRoute: '/login',
       routes: {
-        '/registration': (context) => const RegistrationScreen(),
         '/login': (context) => const LoginScreen(),
+        '/registration': (context) => const RegistrationScreen(),
         '/main': (context) => const MainScreen(),
         '/add_product': (context) => const AddProductScreen(),
         '/product_list': (context) => const ProductListScreen(),

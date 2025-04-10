@@ -41,48 +41,49 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCS-TX5s4pGJ2-slqy6TWeDW35JJhYxSH4',
-    appId: '1:756793988940:web:f8c067d30271745331a1e9',
-    messagingSenderId: '756793988940',
-    projectId: 'red-reference-434715-m9',
-    authDomain: 'red-reference-434715-m9.firebaseapp.com',
-    storageBucket: 'red-reference-434715-m9.firebasestorage.app',
-    measurementId: 'G-K7F4H0CDEY',
+    apiKey: 'AIzaSyCjLBwNdNoLGM_QOWbA6uki2Q6bpl2EUV8',
+    appId: '1:188240394333:web:fddfcb49fbc55653a0b5b4',
+    messagingSenderId: '188240394333',
+    projectId: 'ararat-f83d7',
+    authDomain: 'ararat-f83d7.firebaseapp.com',
+    storageBucket: 'ararat-f83d7.firebasestorage.app',
+    measurementId: 'G-0Y2RL3FHP1',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAQxPl-IcdpBBdD1-xoks3l302KqXi1JSk',
-    appId: '1:756793988940:android:86d098453935339731a1e9',
-    messagingSenderId: '756793988940',
-    projectId: 'red-reference-434715-m9',
-    storageBucket: 'red-reference-434715-m9.firebasestorage.app',
+    apiKey: 'AIzaSyB4mGUm298mlk1bzsngl73rhOstltI86LA',
+    appId: '1:188240394333:android:31c73c8427327675a0b5b4',
+    messagingSenderId: '188240394333',
+    projectId: 'ararat-f83d7',
+    storageBucket: 'ararat-f83d7.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAUoyfTjCwWT89oruOLNhxHpOtg9PjtiuM',
-    appId: '1:756793988940:ios:8e3bc53d8c363b1b31a1e9',
-    messagingSenderId: '756793988940',
-    projectId: 'red-reference-434715-m9',
-    storageBucket: 'red-reference-434715-m9.firebasestorage.app',
+    apiKey: 'AIzaSyBffBFOlRZhdKLi1FLCJR776Gtuzm0y6u4',
+    appId: '1:188240394333:ios:c0dbfb842c35d4e6a0b5b4',
+    messagingSenderId: '188240394333',
+    projectId: 'ararat-f83d7',
+    storageBucket: 'ararat-f83d7.firebasestorage.app',
     iosBundleId: 'com.example.ararat',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyAUoyfTjCwWT89oruOLNhxHpOtg9PjtiuM',
-    appId: '1:756793988940:ios:8e3bc53d8c363b1b31a1e9',
-    messagingSenderId: '756793988940',
-    projectId: 'red-reference-434715-m9',
-    storageBucket: 'red-reference-434715-m9.firebasestorage.app',
+    apiKey: 'AIzaSyBffBFOlRZhdKLi1FLCJR776Gtuzm0y6u4',
+    appId: '1:188240394333:ios:c0dbfb842c35d4e6a0b5b4',
+    messagingSenderId: '188240394333',
+    projectId: 'ararat-f83d7',
+    storageBucket: 'ararat-f83d7.firebasestorage.app',
     iosBundleId: 'com.example.ararat',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyCS-TX5s4pGJ2-slqy6TWeDW35JJhYxSH4',
-    appId: '1:756793988940:web:0da4a8eae8044ddb31a1e9',
-    messagingSenderId: '756793988940',
-    projectId: 'red-reference-434715-m9',
-    authDomain: 'red-reference-434715-m9.firebaseapp.com',
-    storageBucket: 'red-reference-434715-m9.firebasestorage.app',
-    measurementId: 'G-986FL7E2XW',
+    apiKey: 'AIzaSyCjLBwNdNoLGM_QOWbA6uki2Q6bpl2EUV8',
+    appId: '1:188240394333:web:0198e34d492ee222a0b5b4',
+    messagingSenderId: '188240394333',
+    projectId: 'ararat-f83d7',
+    authDomain: 'ararat-f83d7.firebaseapp.com',
+    storageBucket: 'ararat-f83d7.firebasestorage.app',
+    measurementId: 'G-GY79EMBF9F',
   );
+
 }
