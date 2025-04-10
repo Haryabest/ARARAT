@@ -3,8 +3,6 @@ import 'package:ararat/screens/main/tabs/other_profile_tabs/orders_tab.dart';
 import 'package:ararat/screens/main/tabs/other_profile_tabs/delivery_addresses_tab.dart';
 import 'package:ararat/screens/main/tabs/other_profile_tabs/payment_methods_tab.dart';
 import 'package:ararat/screens/main/tabs/other_profile_tabs/notifications_tab.dart';
-import 'package:ararat/screens/main/tabs/other_profile_tabs/settings_tab.dart';
-import 'package:ararat/screens/main/tabs/other_profile_tabs/support_tab.dart';
 import 'package:ararat/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -67,13 +65,101 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Future<void> _signOut() async {
     try {
+      // Показываем индикатор загрузки
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // Выход из аккаунта Firebase
       await _authService.signOut();
-      Navigator.of(context).pushReplacementNamed('/login');
+      
+      // Перенаправляем на экран входа
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка при выходе: $e')),
-      );
+      // В случае ошибки показываем уведомление
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при выходе из аккаунта: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      
+      // Восстанавливаем состояние
+      setState(() {
+        _isLoading = false;
+      });
     }
+  }
+
+  // Показать диалог подтверждения выхода
+  Future<void> _showLogoutDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text(
+            'Выход из аккаунта',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              color: Color(0xFF50321B),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: const Text(
+            'Вы действительно хотите выйти из аккаунта?',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              color: Color(0xFF333333),
+            ),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF50321B),
+              ),
+              child: const Text(
+                'Отмена',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _signOut();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF50321B),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: const Text(
+                'Выйти',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -203,27 +289,15 @@ class _ProfileTabState extends State<ProfileTab> {
                 'Уведомления',
                 const NotificationsTab(),
               ),
-              _menuItem(
-                context,
-                Icons.settings,
-                'Настройки',
-                const SettingsTab(),
-              ),
-              _menuItem(
-                context,
-                Icons.help,
-                'Справка и поддержка',
-                const SupportTab(),
-              ),
               
               const Spacer(),
               
               // Кнопка выхода
               SizedBox(
                 width: double.infinity,
-                height: 40,
+                height: 45,
                 child: ElevatedButton.icon(
-                  onPressed: _signOut,
+                  onPressed: _isLoading ? null : _showLogoutDialog,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF50321B),
                     foregroundColor: Colors.white,
@@ -231,14 +305,24 @@ class _ProfileTabState extends State<ProfileTab> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     elevation: 0,
+                    shadowColor: Colors.transparent,
                   ),
-                  icon: const Icon(
-                    Icons.logout,
-                    size: 18,
-                  ),
-                  label: const Text(
-                    'Выйти из аккаунта',
-                    style: TextStyle(
+                  icon: _isLoading
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.logout,
+                          size: 18,
+                        ),
+                  label: Text(
+                    _isLoading ? 'Выход...' : 'Выйти из аккаунта',
+                    style: const TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
