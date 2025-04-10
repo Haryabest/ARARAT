@@ -581,36 +581,127 @@ class _OrdersTabState extends State<OrdersTab> {
   }
 
   Future<void> _cancelOrder(String orderId) async {
-    showDialog(
+    // Создаем ключ, чтобы иметь возможность закрыть диалог независимо от контекста
+    final GlobalKey<State> _dialogKey = GlobalKey<State>();
+    
+    // Переменная для отслеживания, был ли закрыт диалог
+    bool isDialogClosed = false;
+    
+    // Функция для безопасного закрытия диалога
+    void closeDialog() {
+      if (!isDialogClosed && _dialogKey.currentContext != null) {
+        isDialogClosed = true;
+        Navigator.of(_dialogKey.currentContext!, rootNavigator: true).pop();
+      }
+    }
+    
+    // Проверяем, активен ли виджет
+    if (!mounted) return;
+    
+    // Показываем диалог подтверждения
+    await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Отменить заказ?'),
         content: const Text('Вы уверены, что хотите отменить этот заказ?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Отмена'),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(context);
+              // Закрываем диалог подтверждения
+              Navigator.pop(dialogContext);
+              
+              // Проверяем, активен ли виджет после закрытия диалога
+              if (!mounted) return;
+              
+              // Показываем индикатор загрузки
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (BuildContext loadingContext) {
+                  return Dialog(
+                    key: _dialogKey,
+                    child: const Padding(
+                      padding: EdgeInsets.all(20.0),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Color(0xFF50321B)),
+                          SizedBox(width: 20),
+                          Text('Отмена заказа...'),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
               
               try {
+                // Отменяем заказ
                 await _orderService.cancelOrder(orderId);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Заказ успешно отменен'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-                _loadOrders(); // Перезагружаем список заказов
+                
+                // Безопасно закрываем диалог загрузки
+                closeDialog();
+                
+                // Проверяем, активен ли виджет перед обновлением UI
+                if (mounted) {
+                  setState(() {
+                    for (int i = 0; i < _orders.length; i++) {
+                      if (_orders[i].id == orderId) {
+                        // Обновляем статус заказа локально
+                        Order updatedOrder = Order(
+                          id: _orders[i].id,
+                          userId: _orders[i].userId,
+                          items: _orders[i].items,
+                          subtotal: _orders[i].subtotal,
+                          deliveryCost: _orders[i].deliveryCost,
+                          total: _orders[i].total,
+                          paymentMethod: _orders[i].paymentMethod,
+                          deliveryType: _orders[i].deliveryType,
+                          status: 'отменен',
+                          deliveryAddress: _orders[i].deliveryAddress,
+                          phoneNumber: _orders[i].phoneNumber,
+                          comment: _orders[i].comment,
+                          leaveAtDoor: _orders[i].leaveAtDoor,
+                          createdAt: _orders[i].createdAt,
+                        );
+                        _orders[i] = updatedOrder;
+                        break;
+                      }
+                    }
+                  });
+                  
+                  // Показываем уведомление об успешной отмене
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Заказ успешно отменен'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                  
+                  // Обновляем список заказов
+                  Future.delayed(const Duration(seconds: 1), () {
+                    if (mounted) {
+                      _loadOrders();
+                    }
+                  });
+                }
               } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Ошибка при отмене заказа: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
+                // Безопасно закрываем диалог загрузки в случае ошибки
+                closeDialog();
+                
+                // Показываем уведомление об ошибке, если виджет все еще активен
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Ошибка при отмене заказа: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               }
             },
             style: TextButton.styleFrom(

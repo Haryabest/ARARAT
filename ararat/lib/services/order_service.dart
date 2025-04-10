@@ -480,12 +480,30 @@ class OrderService {
         throw Exception('Доступ запрещен');
       }
 
-      // Обновляем статус заказа
+      // Текущее время для обновления
+      final now = FieldValue.serverTimestamp();
+
+      // Обновляем статус заказа в главной коллекции
       await _ordersCollection.doc(orderId).update({
         'status': 'отменен',
+        'isCancelled': true,
+        'lastUpdatedAt': now,
+        'cancelledAt': now,
+        'cancelledBy': user.uid,
       });
 
-      print('Заказ успешно отменен: $orderId');
+      // Обновляем статус в коллекции пользователя
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('orders')
+          .doc(orderId)
+          .update({
+        'status': 'отменен',
+        'updatedAt': now,
+      });
+
+      print('Заказ успешно отменен и обновлен в обеих коллекциях: $orderId');
     } catch (e) {
       print('Ошибка при отмене заказа: $e');
       throw e;
