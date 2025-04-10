@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ararat/widgets/product_detail_sheet.dart';
 import 'package:ararat/services/user_data_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // Глобальный класс для хранения данных избранного (в реальном приложении это должен быть провайдер или менеджер состояния)
 class FavoritesManager {
@@ -12,6 +13,7 @@ class FavoritesManager {
 
   FavoritesManager._internal() {
     _loadFavoritesFromFirebase();
+    _listenToAuthChanges();
   }
 
   final UserDataService _userDataService = UserDataService();
@@ -22,7 +24,23 @@ class FavoritesManager {
   
   List<Map<String, dynamic>> get favoriteProducts => favoritesNotifier.value;
 
+  // Слушаем изменения аутентификации
+  void _listenToAuthChanges() {
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      if (user != null) {
+        // Пользователь вошел в систему - загружаем его данные
+        _loadFavoritesFromFirebase();
+      } else {
+        // Пользователь вышел - очищаем локальные данные
+        clearFavorites();
+      }
+    });
+  }
+
   Future<void> _loadFavoritesFromFirebase() async {
+    // Сначала очищаем существующие данные
+    favoritesNotifier.value = [];
+    
     try {
       final favorites = await _userDataService.loadFavorites();
       if (favorites.isNotEmpty) {
@@ -64,6 +82,10 @@ class FavoritesManager {
   bool isFavorite(String productName) {
     return favoriteProducts.any((item) => item['name'] == productName);
   }
+  
+  void clearFavorites() {
+    favoritesNotifier.value = [];
+  }
 }
 
 // Глобальный класс для хранения данных корзины
@@ -76,6 +98,7 @@ class CartManager {
 
   CartManager._internal() {
     _loadCartFromFirebase();
+    _listenToAuthChanges();
   }
 
   final UserDataService _userDataService = UserDataService();
@@ -86,7 +109,23 @@ class CartManager {
   
   List<Map<String, dynamic>> get cartProducts => cartNotifier.value;
 
+  // Слушаем изменения аутентификации
+  void _listenToAuthChanges() {
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      if (user != null) {
+        // Пользователь вошел в систему - загружаем его данные
+        _loadCartFromFirebase();
+      } else {
+        // Пользователь вышел - очищаем локальные данные
+        clearCart();
+      }
+    });
+  }
+
   Future<void> _loadCartFromFirebase() async {
+    // Сначала очищаем существующие данные
+    cartNotifier.value = [];
+    
     try {
       final cart = await _userDataService.loadCart();
       if (cart.isNotEmpty) {

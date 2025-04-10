@@ -51,6 +51,12 @@ class _LoginScreenState extends State<LoginScreen> {
         // Вход с email и паролем
         await _authService.signInWithEmailAndPassword(email, password);
         
+        // Обновление данных пользователя для получения актуальной информации
+        User? user = _authService.currentUser;
+        if (user != null) {
+          await user.reload();
+        }
+        
         if (mounted) {
           // Переход на главный экран
           Navigator.pushReplacementNamed(context, '/main');

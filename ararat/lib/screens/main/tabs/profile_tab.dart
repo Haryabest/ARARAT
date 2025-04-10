@@ -5,9 +5,76 @@ import 'package:ararat/screens/main/tabs/other_profile_tabs/payment_methods_tab.
 import 'package:ararat/screens/main/tabs/other_profile_tabs/notifications_tab.dart';
 import 'package:ararat/screens/main/tabs/other_profile_tabs/settings_tab.dart';
 import 'package:ararat/screens/main/tabs/other_profile_tabs/support_tab.dart';
+import 'package:ararat/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
-class ProfileTab extends StatelessWidget {
+class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
+
+  @override
+  State<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends State<ProfileTab> {
+  final AuthService _authService = AuthService();
+  String _displayName = '';
+  String _email = '';
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    User? user = _authService.currentUser;
+    if (user != null) {
+      // Обновим данные с сервера для получения актуальной информации
+      await user.reload();
+      user = _authService.currentUser; // Получаем обновленного пользователя
+
+      // Получаем базовые данные из Firebase Auth
+      String displayName = user?.displayName ?? 'Пользователь';
+      String email = user?.email ?? 'Нет email';
+      
+      // Пробуем получить дополнительные данные из Firestore
+      Map<String, dynamic>? userData = await _authService.getUserData();
+      if (userData != null) {
+        // Если в Firestore есть данные, используем их
+        if (userData['displayName'] != null) {
+          displayName = userData['displayName'];
+        }
+      }
+
+      setState(() {
+        _displayName = displayName;
+        _email = email;
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _displayName = 'Не авторизован';
+        _email = '';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _signOut() async {
+    try {
+      await _authService.signOut();
+      Navigator.of(context).pushReplacementNamed('/login');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при выходе: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,38 +113,64 @@ class ProfileTab extends StatelessWidget {
                           width: 2,
                         ),
                       ),
-                      child: const Center(
-                        child: Icon(
-                          Icons.person,
-                          size: 35,
-                          color: Color(0xFF50321B),
-                        ),
-                      ),
+                      child: _isLoading
+                          ? const Center(
+                              child: SizedBox(
+                                width: 25,
+                                height: 25,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF50321B),
+                                ),
+                              ),
+                            )
+                          : const Center(
+                              child: Icon(
+                                Icons.person,
+                                size: 35,
+                                color: Color(0xFF50321B),
+                              ),
+                            ),
                     ),
                     const SizedBox(width: 16),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Иван Иванов',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF50321B),
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'ivan@example.com',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
-                            color: Color(0xFF838383),
-                          ),
-                        ),
-                      ],
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(
+                              child: SizedBox(
+                                width: 15,
+                                height: 15,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF50321B),
+                                ),
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _displayName,
+                                  style: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF50321B),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _email,
+                                  style: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
+                                    color: Color(0xFF838383),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
                     ),
                   ],
                 ),
@@ -130,9 +223,7 @@ class ProfileTab extends StatelessWidget {
                 width: double.infinity,
                 height: 40,
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    // Выход из аккаунта
-                  },
+                  onPressed: _signOut,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF50321B),
                     foregroundColor: Colors.white,

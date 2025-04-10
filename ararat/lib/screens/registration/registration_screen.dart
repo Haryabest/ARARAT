@@ -40,14 +40,22 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       });
       
       try {
+        // Сохраняем логин для дальнейшего использования
+        final String login = _loginController.text.trim();
+        final String email = _emailController.text.trim();
+        final String password = _passwordController.text.trim();
+        
         // Создаем пользователя в Firebase
         final userCredential = await _authService.registerWithEmailAndPassword(
-          _emailController.text,
-          _passwordController.text,
+          email,
+          password,
         );
         
-        // Добавляем отображаемое имя (логин)
-        await _authService.updateDisplayName(_loginController.text);
+        // Добавляем отображаемое имя (логин) в Firebase Auth и Firestore
+        await _authService.updateDisplayName(login);
+        
+        // Reload user data to ensure everything is updated
+        await _authService.currentUser?.reload();
         
         // Переход на главный экран после успешной регистрации
         if (mounted) {
