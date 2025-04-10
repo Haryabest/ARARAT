@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ararat/widgets/product_detail_sheet.dart';
+import 'package:ararat/services/user_data_service.dart';
 
 // Глобальный класс для хранения данных избранного (в реальном приложении это должен быть провайдер или менеджер состояния)
 class FavoritesManager {
@@ -9,13 +10,36 @@ class FavoritesManager {
     return _instance;
   }
 
-  FavoritesManager._internal();
+  FavoritesManager._internal() {
+    _loadFavoritesFromFirebase();
+  }
+
+  final UserDataService _userDataService = UserDataService();
 
   // Используем ValueNotifier для отслеживания изменений в списке
   final ValueNotifier<List<Map<String, dynamic>>> favoritesNotifier = 
       ValueNotifier<List<Map<String, dynamic>>>([]);
   
   List<Map<String, dynamic>> get favoriteProducts => favoritesNotifier.value;
+
+  Future<void> _loadFavoritesFromFirebase() async {
+    try {
+      final favorites = await _userDataService.loadFavorites();
+      if (favorites.isNotEmpty) {
+        favoritesNotifier.value = favorites;
+      }
+    } catch (e) {
+      print('Ошибка при загрузке избранного: $e');
+    }
+  }
+
+  Future<void> _saveFavoritesToFirebase() async {
+    try {
+      await _userDataService.saveFavorites(favoriteProducts);
+    } catch (e) {
+      print('Ошибка при сохранении избранного: $e');
+    }
+  }
 
   void addToFavorites(Map<String, dynamic> product) {
     // Проверяем, есть ли товар уже в избранном
@@ -26,6 +50,7 @@ class FavoritesManager {
       final newList = List<Map<String, dynamic>>.from(favoriteProducts);
       newList.add(product);
       favoritesNotifier.value = newList;
+      _saveFavoritesToFirebase();
     }
   }
 
@@ -33,6 +58,7 @@ class FavoritesManager {
     final newList = List<Map<String, dynamic>>.from(favoriteProducts);
     newList.removeWhere((item) => item['name'] == productName);
     favoritesNotifier.value = newList;
+    _saveFavoritesToFirebase();
   }
 
   bool isFavorite(String productName) {
@@ -48,13 +74,36 @@ class CartManager {
     return _instance;
   }
 
-  CartManager._internal();
+  CartManager._internal() {
+    _loadCartFromFirebase();
+  }
+
+  final UserDataService _userDataService = UserDataService();
 
   // Используем ValueNotifier для отслеживания изменений в списке
   final ValueNotifier<List<Map<String, dynamic>>> cartNotifier = 
       ValueNotifier<List<Map<String, dynamic>>>([]);
   
   List<Map<String, dynamic>> get cartProducts => cartNotifier.value;
+
+  Future<void> _loadCartFromFirebase() async {
+    try {
+      final cart = await _userDataService.loadCart();
+      if (cart.isNotEmpty) {
+        cartNotifier.value = cart;
+      }
+    } catch (e) {
+      print('Ошибка при загрузке корзины: $e');
+    }
+  }
+
+  Future<void> _saveCartToFirebase() async {
+    try {
+      await _userDataService.saveCart(cartProducts);
+    } catch (e) {
+      print('Ошибка при сохранении корзины: $e');
+    }
+  }
 
   void addToCart(Map<String, dynamic> product) {
     // Проверяем, есть ли товар уже в корзине
@@ -74,12 +123,14 @@ class CartManager {
     }
     
     cartNotifier.value = newList;
+    _saveCartToFirebase();
   }
 
   void removeFromCart(int productId) {
     final newList = List<Map<String, dynamic>>.from(cartProducts);
     newList.removeWhere((item) => item['id'] == productId);
     cartNotifier.value = newList;
+    _saveCartToFirebase();
   }
   
   void incrementQuantity(int productId) {
@@ -89,6 +140,7 @@ class CartManager {
     if (index != -1) {
       newList[index]['quantity'] += 1;
       cartNotifier.value = newList;
+      _saveCartToFirebase();
     }
   }
   
@@ -99,11 +151,13 @@ class CartManager {
     if (index != -1 && newList[index]['quantity'] > 1) {
       newList[index]['quantity'] -= 1;
       cartNotifier.value = newList;
+      _saveCartToFirebase();
     }
   }
   
   void clearCart() {
     cartNotifier.value = [];
+    _saveCartToFirebase();
   }
   
   void updateQuantity(String productName, int quantity) {
@@ -119,6 +173,7 @@ class CartManager {
         newList[index]['quantity'] = quantity;
       }
       cartNotifier.value = newList;
+      _saveCartToFirebase();
     }
   }
 

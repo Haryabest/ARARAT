@@ -20,8 +20,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _passwordController = TextEditingController();
   
   bool _isLoading = false;
-  bool _isGoogleLoading = false;
-  bool _isYandexLoading = false;
   String? _errorMessage;
   
   final _authService = AuthService();
@@ -238,112 +236,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       ),
                     ],
                   ),
-                  
-                  // Разделитель
-                  const SizedBox(height: 24),
-                  Row(
-                    children: const [
-                      Expanded(
-                        child: Divider(
-                          color: Color(0xFFBDBDBD),
-                          thickness: 1,
-                        ),
-                      ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'Войти с помощью',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 12,
-                            color: Color(0xFF9E9E9E),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Divider(
-                          color: Color(0xFFBDBDBD),
-                          thickness: 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                  
-                  // Социальные кнопки
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Google
-                      _buildSocialButton(
-                        label: 'гугл',
-                        onPressed: () {
-                          // В данный момент не функционирует
-                        },
-                        isLoading: _isGoogleLoading,
-                      ),
-                      
-                      // Apple
-                      _buildSocialButton(
-                        label: 'эпл',
-                        onPressed: () {
-                          // В данный момент не функционирует
-                        },
-                      ),
-                      
-                      // Play Market
-                      _buildSocialButton(
-                        label: 'плей маркет',
-                        onPressed: () {
-                          // В данный момент не функционирует
-                        },
-                        isLoading: _isYandexLoading,
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-  
-  Widget _buildSocialButton({
-    required String label,
-    required VoidCallback onPressed,
-    bool isLoading = false,
-  }) {
-    return ElevatedButton(
-      onPressed: isLoading ? null : onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF242731),
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        minimumSize: const Size(80, 40),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      ),
-      child: isLoading 
-          ? const SizedBox(
-              height: 16,
-              width: 16,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            )
-          : Text(
-              label,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
-              ),
-            ),
     );
   }
 } 

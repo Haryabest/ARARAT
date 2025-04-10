@@ -196,7 +196,9 @@ class _CartTabState extends State<CartTab> with TickerProviderStateMixin {
   double get _totalAmount {
     double total = 0;
     for (var item in _cartManager.cartNotifier.value) {
-      total += (item['price'] as double) * (item['quantity'] as int);
+      // Проверяем тип price и безопасно приводим к double
+      double price = item['price'] is int ? (item['price'] as int).toDouble() : (item['price'] as double);
+      total += price * (item['quantity'] as int);
     }
     return total;
   }
@@ -434,7 +436,8 @@ class _CartTabState extends State<CartTab> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${(item['price'] as double)} ₽',
+                  // Преобразуем цену для отображения
+                  '${item['price'] is int ? (item['price'] as int) : (item['price'] as double)} ₽',
                   style: const TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 14,
