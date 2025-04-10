@@ -127,9 +127,107 @@ class AuthService {
   
   // Обновление пароля пользователя
   Future<void> updatePassword(String newPassword) async {
-    User? user = _auth.currentUser;
-    if (user != null) {
-      await user.updatePassword(newPassword.trim());
+    try {
+      print('Начало обновления пароля, длина пароля: ${newPassword.length}');
+      
+      if (newPassword.trim().isEmpty) {
+        throw 'Пароль не может быть пустым';
+      }
+      
+      final user = FirebaseAuth.instance.currentUser;
+      
+      // Проверяем, авторизован ли пользователь
+      if (user == null) {
+        print('Ошибка: пользователь не авторизован');
+        throw FirebaseAuthException(
+          code: 'user-not-signed-in',
+          message: 'Пользователь не авторизован'
+        );
+      }
+      
+      print('Текущий пользователь: ${user.email}, uid: ${user.uid}');
+      
+      // Проверяем анонимного пользователя
+      if (user.isAnonymous) {
+        print('Ошибка: анонимный пользователь');
+        throw FirebaseAuthException(
+          code: 'operation-not-allowed',
+          message: 'Анонимные пользователи не могут менять пароль'
+        );
+      }
+      
+      // Проверяем наличие email
+      if (user.email == null || user.email!.isEmpty) {
+        print('Ошибка: email не найден');
+        throw FirebaseAuthException(
+          code: 'email-not-found',
+          message: 'Email пользователя не найден'
+        );
+      }
+      
+      // Проверяем время последнего входа
+      final metadata = user.metadata;
+      final lastSignInTime = metadata.lastSignInTime;
+      final now = DateTime.now();
+      
+      print('Время последнего входа: ${lastSignInTime?.toString() ?? "неизвестно"}');
+      print('Текущее время: ${now.toString()}');
+      
+      if (lastSignInTime != null) {
+        final diffMinutes = now.difference(lastSignInTime).inMinutes;
+        print('Разница в минутах: $diffMinutes');
+        
+        // Сокращаем до 1 минуты для тестирования
+        if (diffMinutes > 1) {
+          print('Требуется повторная аутентификация');
+          throw FirebaseAuthException(
+            code: 'requires-recent-login',
+            message: 'Требуется повторный вход в систему для обновления пароля'
+          );
+        }
+      }
+      
+      // Обновляем пароль
+      print('Начинаем непосредственное обновление пароля');
+      await user.updatePassword(newPassword);
+      
+      // Записываем событие в Firestore для логирования
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update({
+          'passwordUpdatedAt': FieldValue.serverTimestamp(),
+        });
+        print('Запись о смене пароля сохранена в Firestore');
+      } catch (e) {
+        // Ошибки при обновлении Firestore не считаем критичными
+        print('Ошибка записи в Firestore: $e');
+      }
+      
+      print('Пароль успешно обновлен');
+      return;
+    } on FirebaseAuthException catch (e) {
+      print('FirebaseAuthException при обновлении пароля: ${e.code} - ${e.message}');
+      
+      // Обработка конкретных ошибок Firebase
+      switch (e.code) {
+        case 'weak-password':
+          throw 'Слишком простой пароль. Используйте не менее 6 символов';
+        case 'requires-recent-login':
+          throw 'Для смены пароля требуется повторный вход в систему. Пожалуйста, выйдите и войдите снова.';
+        case 'user-not-found':
+          throw 'Пользователь не найден';
+        case 'user-disabled':
+          throw 'Аккаунт пользователя отключен';
+        case 'network-request-failed':
+          throw 'Проверьте подключение к интернету';
+        default:
+          throw 'Ошибка обновления пароля: ${e.message ?? e.code}';
+      }
+    } catch (e) {
+      print('Неизвестная ошибка при обновлении пароля: $e');
+      throw 'Не удалось обновить пароль: $e';
     }
   }
   
