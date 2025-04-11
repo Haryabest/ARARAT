@@ -1,18 +1,31 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Функция для проверки роли пользователя
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Функция для проверки владельца документа
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
     // Разрешаем доступ к коллекции orders
     match /orders/{orderId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow write: if isAdmin() || isOwner(resource.data.userId);
     }
     
     // Разрешаем доступ пользователям к своим документам
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (isOwner(userId) || isAdmin());
+      allow write: if request.auth != null && (isOwner(userId) || isAdmin());
       
       // Разрешаем доступ к подколлекции orders для текущего пользователя
       match /orders/{orderId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null && (isOwner(userId) || isAdmin());
       }
     }
   }

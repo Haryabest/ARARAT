@@ -5,8 +5,34 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // Константы ролей пользователей
+  static const String ROLE_USER = 'user';
+  static const String ROLE_ADMIN = 'admin';
+
   // Получить текущего пользователя
   User? get currentUser => _auth.currentUser;
+
+  // Получить роль текущего пользователя
+  Future<String> getUserRole() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      try {
+        DocumentSnapshot doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['role'] ?? ROLE_USER;
+        }
+      } catch (e) {
+        print('Ошибка при получении роли пользователя: $e');
+      }
+    }
+    return ROLE_USER;
+  }
+
+  // Проверка является ли пользователь администратором
+  Future<bool> isAdmin() async {
+    return await getUserRole() == ROLE_ADMIN;
+  }
 
   // Вход через Email и пароль
   Future<UserCredential> signInWithEmailAndPassword(String email, String password) async {
@@ -23,9 +49,10 @@ class AuthService {
       password: password.trim(),
     );
     
-    // Создаем запись о пользователе в Firestore
+    // Создаем запись о пользователе в Firestore с ролью по умолчанию
     await _saveUserDataToFirestore(userCredential.user!.uid, {
       'email': email.trim(),
+      'role': ROLE_USER, // Назначаем роль пользователя по умолчанию
       'createdAt': FieldValue.serverTimestamp(),
     });
     
@@ -245,6 +272,30 @@ class AuthService {
         ...data,
         'updatedAt': FieldValue.serverTimestamp(),
       });
+    }
+  }
+
+  // Изменение роли пользователя (только для администраторов)
+  Future<void> updateUserRole(String userId, String newRole) async {
+    // Проверяем, является ли текущий пользователь администратором
+    if (!await isAdmin()) {
+      throw 'Недостаточно прав для изменения роли пользователя';
+    }
+
+    // Проверяем валидность новой роли
+    if (newRole != ROLE_USER && newRole != ROLE_ADMIN) {
+      throw 'Недопустимая роль пользователя';
+    }
+
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'role': newRole,
+        'roleUpdatedAt': FieldValue.serverTimestamp(),
+        'roleUpdatedBy': _auth.currentUser?.uid,
+      });
+    } catch (e) {
+      print('Ошибка при обновлении роли пользователя: $e');
+      throw 'Не удалось обновить роль пользователя';
     }
   }
 } 
