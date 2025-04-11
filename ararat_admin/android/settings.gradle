@@ -1,0 +1,42 @@
+// Настройки для Android проекта Flutter
+pluginManagement {
+    // Указываем расположение Flutter SDK
+    def flutterSdkPath = {
+        def properties = new Properties()
+        file("local.properties").withInputStream { properties.load(it) }
+        def flutterSdkPath = properties.getProperty("flutter.sdk")
+        assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+        return flutterSdkPath
+    }()
+
+    // Подключаем Gradle плагин Flutter
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    // Репозитории для получения Gradle плагинов
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+// Настройка плагинов проекта в декларативном стиле
+plugins {
+    // Flutter Gradle плагин
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+    
+    // Android плагины
+    id "com.android.application" version "8.1.0" apply false
+    
+    // Firebase плагины
+    id "com.google.gms.google-services" version "4.3.15" apply false
+    
+    // Kotlin плагин
+    id "org.jetbrains.kotlin.android" version "1.8.22" apply false
+}
+
+// Включаем модуль app в сборку
+include ":app"
+
+// Старый способ (не рекомендуется):
+// apply from: "$flutterSdkPath/packages/flutter_tools/gradle/app_plugin_loader.gradle"

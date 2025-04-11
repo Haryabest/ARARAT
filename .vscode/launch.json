@@ -23,6 +23,26 @@
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"
+        },
+        {
+            "name": "ararat_admin",
+            "cwd": "ararat_admin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "ararat_admin (profile mode)",
+            "cwd": "ararat_admin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "ararat_admin (release mode)",
+            "cwd": "ararat_admin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
         }
     ]
 }

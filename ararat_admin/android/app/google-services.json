@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "301989351145",
+    "project_id": "arara-efa6f",
+    "storage_bucket": "arara-efa6f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:301989351145:android:5f0e99f75c74369efc2a78",
+        "android_client_info": {
+          "package_name": "com.example.ararat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB3BKbiPQ6_yfD81ND1_WR4TufGvzV1nfE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
