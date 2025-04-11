@@ -74,7 +74,7 @@ class _HistoryTabState extends State<HistoryTab> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Здесь отображаются удаленные заказы',
+                '',
                 style: TextStyle(
                   fontFamily: 'Inter',
                   fontSize: 14,
@@ -435,13 +435,42 @@ class _HistoryTabState extends State<HistoryTab> {
     final displayItems = items.length > 4 ? items.sublist(0, 4) : items;
     final hasMore = items.length > 4;
     
+    print('Отображение миниатюр товаров: найдено ${displayItems.length} товаров');
+    
     return ListView.builder(
       scrollDirection: Axis.horizontal,
       itemCount: displayItems.length + (hasMore ? 1 : 0),
       itemBuilder: (context, index) {
         if (index < displayItems.length) {
           final item = displayItems[index];
-          final imageUrl = item['imageUrl'] as String?;
+          
+          // Проверяем различные поля для изображения
+          String? imageUrl;
+          
+          if (item is Map<String, dynamic>) {
+            // Проверяем разные возможные поля для URL изображения
+            if (item.containsKey('imageUrl') && item['imageUrl'] != null) {
+              imageUrl = item['imageUrl'] as String?;
+            } else if (item.containsKey('image') && item['image'] != null) {
+              imageUrl = item['image'] as String?;
+            } else if (item.containsKey('img') && item['img'] != null) {
+              imageUrl = item['img'] as String?;
+            }
+            
+            print('Товар #$index: ${item['name'] ?? 'без имени'}, imageUrl: $imageUrl');
+          }
+          
+          // Проверяем и исправляем URL изображения
+          if (imageUrl != null && imageUrl.isNotEmpty) {
+            // Если URL не содержит http/https, добавляем префикс для Firebase Storage
+            if (!imageUrl.startsWith('http')) {
+              if (imageUrl.startsWith('/')) {
+                imageUrl = 'https://firebasestorage.googleapis.com/v0/b/ararat-efa6f.appspot.com/o${Uri.encodeComponent(imageUrl)}?alt=media';
+              } else {
+                imageUrl = 'https://firebasestorage.googleapis.com/v0/b/ararat-efa6f.appspot.com/o/${Uri.encodeComponent(imageUrl)}?alt=media';
+              }
+            }
+          }
           
           return Container(
             width: 40,
@@ -456,11 +485,14 @@ class _HistoryTabState extends State<HistoryTab> {
                 ? Image.network(
                     imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Icons.image_not_supported_outlined,
-                      size: 20,
-                      color: Colors.grey.shade400,
-                    ),
+                    errorBuilder: (context, error, stackTrace) {
+                      print('Ошибка загрузки изображения: $error');
+                      return Icon(
+                        Icons.image_not_supported_outlined,
+                        size: 20,
+                        color: Colors.grey.shade400,
+                      );
+                    },
                   )
                 : Icon(
                     Icons.fastfood,
@@ -497,6 +529,8 @@ class _HistoryTabState extends State<HistoryTab> {
   // Метод для отображения подробной информации о заказе
   void _showOrderDetails(Map<String, dynamic> orderData) {
     final List<dynamic> items = orderData['items'] as List<dynamic>;
+    
+    print('Открытие деталей заказа, товаров: ${items.length}');
     
     showModalBottomSheet(
       context: context,
@@ -610,7 +644,34 @@ class _HistoryTabState extends State<HistoryTab> {
                     final name = item['name'] as String? ?? 'Товар';
                     final price = (item['price'] as num?)?.toDouble() ?? 0.0;
                     final quantity = (item['quantity'] as num?)?.toInt() ?? 1;
-                    final imageUrl = item['imageUrl'] as String?;
+                    
+                    // Проверяем различные поля для изображения
+                    String? imageUrl;
+                    
+                    if (item is Map<String, dynamic>) {
+                      // Проверяем разные возможные поля для URL изображения
+                      if (item.containsKey('imageUrl') && item['imageUrl'] != null) {
+                        imageUrl = item['imageUrl'] as String?;
+                      } else if (item.containsKey('image') && item['image'] != null) {
+                        imageUrl = item['image'] as String?;
+                      } else if (item.containsKey('img') && item['img'] != null) {
+                        imageUrl = item['img'] as String?;
+                      }
+                      
+                      print('Детали - Товар #$index: $name, imageUrl: $imageUrl');
+                    }
+                    
+                    // Проверяем и исправляем URL изображения
+                    if (imageUrl != null && imageUrl.isNotEmpty) {
+                      // Если URL не содержит http/https, добавляем префикс для Firebase Storage
+                      if (!imageUrl.startsWith('http')) {
+                        if (imageUrl.startsWith('/')) {
+                          imageUrl = 'https://firebasestorage.googleapis.com/v0/b/ararat-efa6f.appspot.com/o${Uri.encodeComponent(imageUrl)}?alt=media';
+                        } else {
+                          imageUrl = 'https://firebasestorage.googleapis.com/v0/b/ararat-efa6f.appspot.com/o/${Uri.encodeComponent(imageUrl)}?alt=media';
+                        }
+                      }
+                    }
                     
                     return ListTile(
                       leading: Container(
@@ -625,11 +686,14 @@ class _HistoryTabState extends State<HistoryTab> {
                           ? Image.network(
                               imageUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Icon(
-                                Icons.image_not_supported_outlined,
-                                size: 20,
-                                color: Colors.grey.shade400,
-                              ),
+                              errorBuilder: (context, error, stackTrace) {
+                                print('Ошибка загрузки изображения в деталях: $error');
+                                return Icon(
+                                  Icons.image_not_supported_outlined,
+                                  size: 20,
+                                  color: Colors.grey.shade400,
+                                );
+                              },
                             )
                           : Icon(
                               Icons.fastfood,

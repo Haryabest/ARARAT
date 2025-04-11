@@ -6,6 +6,8 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'address_search_screen.dart';
+import '../../../../services/address_service.dart';
+import '../../../../models/address_model.dart';
 
 class DeliveryAddressesTab extends StatefulWidget {
   const DeliveryAddressesTab({super.key});
@@ -15,18 +17,163 @@ class DeliveryAddressesTab extends StatefulWidget {
 }
 
 class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
-  final List<Address> _addresses = [];
+  final List<AddressModel> _addresses = [];
   final MapController _mapController = MapController();
   Position? _currentPosition;
   LatLng? _selectedLocation;
   String _selectedAddress = '';
   bool _isLoading = false;
+  final AddressService _addressService = AddressService();
   
   @override
   void initState() {
     super.initState();
+    _loadAddresses();
   }
   
+  // Загрузка адресов из Firestore
+  Future<void> _loadAddresses() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      final addresses = await _addressService.getAddresses();
+      setState(() {
+        _addresses.clear();
+        _addresses.addAll(addresses);
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при загрузке адресов: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  // Сохранение нового или обновление существующего адреса
+  Future<void> _saveAddress(AddressModel address) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      if (address.id.isEmpty) {
+        // Сохраняем новый адрес
+        await _addressService.addAddress(address);
+      } else {
+        // Обновляем существующий адрес
+        await _addressService.updateAddress(address);
+      }
+      
+      // Перезагружаем список адресов
+      await _loadAddresses();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Адрес успешно сохранен'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при сохранении адреса: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  // Удаление адреса
+  Future<void> _deleteAddress(String addressId) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      await _addressService.deleteAddress(addressId);
+      
+      // Перезагружаем список адресов
+      await _loadAddresses();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Адрес успешно удален'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при удалении адреса: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+  
+  // Установка адреса по умолчанию
+  Future<void> _setDefaultAddress(String addressId) async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      await _addressService.setDefaultAddress(addressId);
+      
+      // Перезагружаем список адресов
+      await _loadAddresses();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Адрес установлен как основной'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при установке адреса по умолчанию: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _determinePosition() async {
     setState(() {
       _isLoading = true;
@@ -80,7 +227,7 @@ class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
       });
     }
   }
-  
+
   Future<void> _getAddressFromCoordinates(LatLng location) async {
     try {
       
@@ -311,13 +458,18 @@ class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
                             ),
                           ),
                         ),
-                        const Text(
-                          'Выберите адрес на карте',
-                          style: TextStyle(
-                            color: Color(0xFF50321B),
-                            fontFamily: 'Inter',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            'Выберите адрес на карте',
+                            style: const TextStyle(
+                              color: Color(0xFF50321B),
+                              fontFamily: 'Inter',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
                         GestureDetector(
@@ -348,7 +500,7 @@ class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
                               }
                               
                               _showAddressForm(
-                                prefilled: Address(
+                                prefilled: AddressModel(
                                   id: DateTime.now().millisecondsSinceEpoch.toString(),
                                   type: addressType ?? 'Другой',
                                   title: '',
@@ -356,6 +508,10 @@ class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
                                   street: street,
                                   house: house,
                                   apartment: '',
+                                  entrance: '',
+                                  floor: '',
+                                  intercom: '',
+                                  isDefault: false,
                                 ),
                               );
                             } else {
@@ -557,7 +713,7 @@ class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
     });
   }
 
-  void _showAddressForm({Address? existingAddress, String? addressType, Address? prefilled}) {
+  void _showAddressForm({AddressModel? existingAddress, String? addressType, AddressModel? prefilled}) {
     final TextEditingController titleController = TextEditingController(
       text: prefilled?.title ?? existingAddress?.title ?? '',
     );
@@ -573,206 +729,274 @@ class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
     final TextEditingController apartmentController = TextEditingController(
       text: prefilled?.apartment ?? existingAddress?.apartment ?? '',
     );
+    final TextEditingController entranceController = TextEditingController(
+      text: prefilled?.entrance ?? existingAddress?.entrance ?? '',
+    );
+    final TextEditingController floorController = TextEditingController(
+      text: prefilled?.floor ?? existingAddress?.floor ?? '',
+    );
+    final TextEditingController intercomController = TextEditingController(
+      text: prefilled?.intercom ?? existingAddress?.intercom ?? '',
+    );
     
     String type = prefilled?.type ?? existingAddress?.type ?? addressType ?? 'Другой';
+    bool isDefault = prefilled?.isDefault ?? existingAddress?.isDefault ?? false;
     
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Text(
-                      'Отмена',
-                      style: TextStyle(
-                        color: Color(0xFF50321B),
-                        fontFamily: 'Inter',
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: const Text(
+                        'Отмена',
+                        style: TextStyle(
+                          color: Color(0xFF50321B),
+                          fontFamily: 'Inter',
+                        ),
                       ),
                     ),
-                  ),
-                  const Text(
-                    'Новый адрес',
-                    style: TextStyle(
-                      color: Color(0xFF50321B),
-                      fontFamily: 'Inter',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      // Сохраняем новый адрес
-                      if (cityController.text.isNotEmpty && 
-                          streetController.text.isNotEmpty && 
-                          houseController.text.isNotEmpty) {
-                        
-                        final newAddress = Address(
-                          id: existingAddress?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                          type: type,
-                          title: titleController.text,
-                          city: cityController.text,
-                          street: streetController.text,
-                          house: houseController.text,
-                          apartment: apartmentController.text,
-                        );
-                        
-                        setState(() {
-                          if (existingAddress != null) {
-                            // Обновляем существующий адрес
-                            final index = _addresses.indexWhere((a) => a.id == existingAddress.id);
-                            if (index != -1) {
-                              _addresses[index] = newAddress;
-                            }
-                          } else {
-                            // Добавляем новый адрес
-                            _addresses.add(newAddress);
-                          }
-                        });
-                        
-                        Navigator.pop(context);
-                      } else {
-                        // Показываем ошибку, если не все поля заполнены
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Заполните все обязательные поля'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      }
-                    },
-                    child: const Text(
-                      'Сохранить',
-                      style: TextStyle(
+                    Text(
+                      existingAddress != null ? 'Изменить адрес' : 'Новый адрес',
+                      style: const TextStyle(
                         color: Color(0xFF50321B),
                         fontFamily: 'Inter',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              // Поле для названия адреса
-              _buildTextField(
-                controller: titleController,
-                label: 'Название адреса',
-                hintText: 'Например: Работа, Дом брата и т.д.',
-              ),
-              const SizedBox(height: 16),
-              
-              // Тип адреса
-              const Text(
-                'Тип адреса',
-                style: TextStyle(
-                  color: Color(0xFF50321B),
-                  fontFamily: 'Inter',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                    GestureDetector(
+                      onTap: () {
+                        // Сохраняем новый адрес
+                        if (cityController.text.isNotEmpty && 
+                            streetController.text.isNotEmpty && 
+                            houseController.text.isNotEmpty) {
+                          
+                          final newAddress = AddressModel(
+                            id: existingAddress?.id ?? '',
+                            type: type,
+                            title: titleController.text,
+                            city: cityController.text,
+                            street: streetController.text,
+                            house: houseController.text,
+                            apartment: apartmentController.text,
+                            entrance: entranceController.text,
+                            floor: floorController.text,
+                            intercom: intercomController.text,
+                            isDefault: isDefault,
+                          );
+                          
+                          Navigator.pop(context);
+                          _saveAddress(newAddress);
+                        } else {
+                          // Показываем ошибку, если не все поля заполнены
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Заполните все обязательные поля'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                      child: const Text(
+                        'Сохранить',
+                        style: TextStyle(
+                          color: Color(0xFF50321B),
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
               
-              // Радио-кнопки для типа адреса
-              StatefulBuilder(
-                builder: (context, setRadioState) {
-                  return Column(
-                    children: [
-                      _buildRadioOption(
-                        title: 'Домашний',
-                        value: 'Домашний',
-                        groupValue: type,
-                        onChanged: (value) {
-                          setRadioState(() {
-                            type = value!;
-                          });
-                        },
-                      ),
-                      _buildRadioOption(
-                        title: 'Рабочий',
-                        value: 'Рабочий',
-                        groupValue: type,
-                        onChanged: (value) {
-                          setRadioState(() {
-                            type = value!;
-                          });
-                        },
-                      ),
-                      _buildRadioOption(
-                        title: 'Другой',
-                        value: 'Другой',
-                        groupValue: type,
-                        onChanged: (value) {
-                          setRadioState(() {
-                            type = value!;
-                          });
-                        },
-                      ),
-                    ],
-                  );
-                },
-              ),
-              
-              const SizedBox(height: 16),
-              
-              // Поля для ввода адреса
-              _buildTextField(
-                controller: cityController,
-                label: 'Город *',
-                hintText: 'Москва',
-              ),
-              const SizedBox(height: 12),
-              
-              _buildTextField(
-                controller: streetController,
-                label: 'Улица *',
-                hintText: 'ул. Пушкина',
-              ),
-              const SizedBox(height: 12),
-              
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildTextField(
-                      controller: houseController,
-                      label: 'Дом *',
-                      hintText: '10',
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // По умолчанию
+                        Row(
+                          children: [
+                            Checkbox(
+                              value: isDefault,
+                              onChanged: (value) {
+                                setModalState(() {
+                                  isDefault = value ?? false;
+                                });
+                              },
+                              activeColor: const Color(0xFF50321B),
+                            ),
+                            const Text(
+                              'Использовать как адрес по умолчанию',
+                              style: TextStyle(
+                                color: Color(0xFF50321B),
+                                fontFamily: 'Inter',
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        // Поле для названия адреса
+                        _buildTextField(
+                          controller: titleController,
+                          label: 'Название адреса',
+                          hintText: 'Например: Работа, Дом брата и т.д.',
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Тип адреса
+                        const Text(
+                          'Тип адреса',
+                          style: TextStyle(
+                            color: Color(0xFF50321B),
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        
+                        // Радио-кнопки для типа адреса
+                        Column(
+                          children: [
+                            _buildRadioOption(
+                              title: 'Домашний',
+                              value: 'Домашний',
+                              groupValue: type,
+                              onChanged: (value) {
+                                setModalState(() {
+                                  type = value!;
+                                });
+                              },
+                            ),
+                            _buildRadioOption(
+                              title: 'Рабочий',
+                              value: 'Рабочий',
+                              groupValue: type,
+                              onChanged: (value) {
+                                setModalState(() {
+                                  type = value!;
+                                });
+                              },
+                            ),
+                            _buildRadioOption(
+                              title: 'Другой',
+                              value: 'Другой',
+                              groupValue: type,
+                              onChanged: (value) {
+                                setModalState(() {
+                                  type = value!;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        // Поля для ввода адреса
+                        _buildTextField(
+                          controller: cityController,
+                          label: 'Город *',
+                          hintText: 'Москва',
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        _buildTextField(
+                          controller: streetController,
+                          label: 'Улица *',
+                          hintText: 'ул. Пушкина',
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildTextField(
+                                controller: houseController,
+                                label: 'Дом *',
+                                hintText: '10',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildTextField(
+                                controller: apartmentController,
+                                label: 'Квартира/офис',
+                                hintText: '101',
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 12),
+                        
+                        // Дополнительные поля
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildTextField(
+                                controller: entranceController,
+                                label: 'Подъезд',
+                                hintText: '1',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildTextField(
+                                controller: floorController,
+                                label: 'Этаж',
+                                hintText: '5',
+                              ),
+                            ),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 12),
+                        
+                        _buildTextField(
+                          controller: intercomController,
+                          label: 'Домофон',
+                          hintText: 'Код домофона',
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        const Text(
+                          '* Обязательные поля',
+                          style: TextStyle(
+                            color: Color(0xFF838383),
+                            fontFamily: 'Inter',
+                            fontSize: 12,
+                          ),
+                        ),
+                        // Добавляем пространство внизу чтобы избежать BOTTOM OVERFLOW
+                        const SizedBox(height: 60),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildTextField(
-                      controller: apartmentController,
-                      label: 'Квартира',
-                      hintText: '101',
-                    ),
-                  ),
-                ],
-              ),
-              
-              const SizedBox(height: 12),
-              const Text(
-                '* Обязательные поля',
-                style: TextStyle(
-                  color: Color(0xFF838383),
-                  fontFamily: 'Inter',
-                  fontSize: 12,
                 ),
               ),
             ],
@@ -870,283 +1094,349 @@ class _DeliveryAddressesTabState extends State<DeliveryAddressesTab> {
     );
   }
   
-  void _deleteAddress(String id) {
-    setState(() {
-      _addresses.removeWhere((address) => address.id == id);
-    });
+  Widget _buildSavedAddressCard(AddressModel address) {
+    final bool isDefault = address.isDefault;
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: isDefault ? const Color(0xFF50321B) : Colors.grey.shade300,
+          width: isDefault ? 2 : 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Иконка типа адреса
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0E8DD),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    address.type == 'Домашний' ? Icons.home 
+                    : address.type == 'Рабочий' ? Icons.business 
+                    : Icons.location_on,
+                    color: const Color(0xFF50321B),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                
+                // Информация об адресе
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              address.title.isNotEmpty ? address.title : address.type,
+                              style: const TextStyle(
+                                color: Color(0xFF50321B),
+                                fontFamily: 'Inter',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (isDefault)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF50321B),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                'По умолчанию',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontFamily: 'Inter',
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        address.fullAddress,
+                        style: const TextStyle(
+                          color: Color(0xFF50321B),
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (address.apartment.isNotEmpty || 
+                          address.entrance.isNotEmpty || 
+                          address.floor.isNotEmpty || 
+                          address.intercom.isNotEmpty)
+                        const SizedBox(height: 4),
+                      if (address.apartment.isNotEmpty)
+                        Text(
+                          '${address.type == "Рабочий" ? "Офис" : "Квартира"}: ${address.apartment}',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                          ),
+                        ),
+                      if (address.entrance.isNotEmpty || address.floor.isNotEmpty)
+                        Text(
+                          'Подъезд: ${address.entrance}${address.floor.isNotEmpty ? ', Этаж: ${address.floor}' : ''}',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                          ),
+                        ),
+                      if (address.intercom.isNotEmpty)
+                        Text(
+                          'Домофон: ${address.intercom}',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            const Divider(height: 1, color: Color(0xFFE0D5C9)),
+            const SizedBox(height: 12),
+            
+            // Кнопки действий
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (!isDefault)
+                  TextButton.icon(
+                    onPressed: () => _setDefaultAddress(address.id),
+                    icon: const Icon(
+                      Icons.check_circle_outline,
+                      size: 18,
+                      color: Color(0xFF50321B),
+                    ),
+                    label: const Text(
+                      'По умолчанию',
+                      style: TextStyle(
+                        color: Color(0xFF50321B),
+                        fontFamily: 'Inter',
+                        fontSize: 14,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  )
+                else
+                  const SizedBox(width: 120),
+                
+                Row(
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        _showAddressForm(existingAddress: address);
+                      },
+                      icon: const Icon(
+                        Icons.edit,
+                        color: Color(0xFF50321B),
+                        size: 20,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 16),
+                    IconButton(
+                      onPressed: () {
+                        // Показываем диалог подтверждения удаления
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Удалить адрес?'),
+                            content: const Text('Вы уверены, что хотите удалить этот адрес?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Отмена'),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _deleteAddress(address.id);
+                                },
+                                child: const Text(
+                                  'Удалить',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      icon: const Icon(
+                        Icons.delete,
+                        color: Colors.red,
+                        size: 20,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFA99378),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFFF8F2E9),
         elevation: 0,
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: const Padding(
-            padding: EdgeInsets.all(12.0),
-            child: Icon(Icons.arrow_back_ios, color: Color(0xFF50321B)),
-          ),
-        ),
         title: const Text(
           'Адреса доставки',
           style: TextStyle(
-            color: Color(0xFFFFFFFF),
+            color: Color(0xFF50321B),
             fontFamily: 'Inter',
             fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
-        actions: [
-          GestureDetector(
-            onTap: () => _showMap(),
-            child: const Padding(
-              padding: EdgeInsets.all(12.0),
-              child: Icon(Icons.add, color: Color(0xFF50321B)),
-            ),
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back,
+            color: Color(0xFF50321B),
           ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Всегда показываем кнопки добавления адресов
-            const Text(
-              'Адреса доставки',
-              style: TextStyle(
-                color: Color(0xFFFFFFFF),
-                fontFamily: 'Inter',
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _addressButton(
-              'Добавить домашний адрес',
-              Icons.home,
-              () => _showMap(addressType: 'Домашний'),
-            ),
-            const SizedBox(height: 12),
-            _addressButton(
-              'Добавить рабочий адрес',
-              Icons.work,
-              () => _showMap(addressType: 'Рабочий'),
-            ),
-            const SizedBox(height: 12),
-            _addressButton(
-              'Добавить другой адрес',
-              Icons.location_on,
-              () => _showMap(addressType: 'Другой'),
-            ),
-            
-            // Если есть сохраненные адреса, показываем их список
-            if (_addresses.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              const Text(
-                'Мои адреса',
-                style: TextStyle(
-                  color: Color(0xFF50321B),
-                  fontFamily: 'Inter',
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: _addresses.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final address = _addresses[index];
-                    return _savedAddressCard(
-                      address: address,
-                      onEdit: () => _showAddressForm(existingAddress: address),
-                      onDelete: () => _deleteAddress(address.id),
-                    );
-                  },
-                ),
-              ),
-            ] else ...[
-              // Если адресов нет, добавляем расширяющийся контейнер,
-              // чтобы кнопки были вверху экрана
-              const Expanded(child: SizedBox()),
-            ],
-          ],
+          onPressed: () => Navigator.pop(context),
         ),
       ),
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF50321B)))
+          : Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Кнопка добавления адреса
+                  InkWell(
+                    onTap: () => _showMap(),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0E8DD),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFFE0D5C9),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(
+                            Icons.add_location_alt,
+                            color: Color(0xFF50321B),
+                            size: 24,
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Добавить новый адрес',
+                            style: TextStyle(
+                              color: Color(0xFF50321B),
+                              fontFamily: 'Inter',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // Заголовок для списка адресов
+                  if (_addresses.isNotEmpty)
+                    const Text(
+                      'Сохраненные адреса',
+                      style: TextStyle(
+                        color: Color(0xFF50321B),
+                        fontFamily: 'Inter',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  
+                  if (_addresses.isNotEmpty)
+                    const SizedBox(height: 16),
+                  
+                  // Список сохраненных адресов
+                  if (_addresses.isEmpty)
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(
+                              Icons.location_off,
+                              color: Color(0xFFE0D5C9),
+                              size: 64,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'У вас пока нет сохраненных адресов',
+                              style: TextStyle(
+                                color: Color(0xFF50321B),
+                                fontFamily: 'Inter',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Добавьте свой первый адрес доставки',
+                              style: TextStyle(
+                                color: Color(0xFF838383),
+                                fontFamily: 'Inter',
+                                fontSize: 14,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: _addresses.length,
+                        itemBuilder: (context, index) {
+                          return _buildSavedAddressCard(_addresses[index]);
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
-
-  Widget _addressButton(String text, IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 5,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: const Color(0xFF50321B),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              text,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF50321B),
-              ),
-            ),
-            const Spacer(),
-            const Icon(
-              Icons.arrow_forward_ios,
-              size: 14,
-              color: Color(0xFF838383),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
-  Widget _savedAddressCard({
-    required Address address,
-    required VoidCallback onEdit,
-    required VoidCallback onDelete,
-  }) {
-    IconData typeIcon;
-    switch (address.type) {
-      case 'Домашний':
-        typeIcon = Icons.home;
-        break;
-      case 'Рабочий':
-        typeIcon = Icons.work;
-        break;
-      default:
-        typeIcon = Icons.location_on;
-    }
-    
-    final String fullAddress = [
-      address.city,
-      address.street,
-      'д. ${address.house}',
-      if (address.apartment.isNotEmpty) 'кв. ${address.apartment}',
-    ].join(', ');
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                typeIcon,
-                size: 18,
-                color: const Color(0xFF50321B),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                address.type,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF50321B),
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: onEdit,
-                child: const Icon(
-                  Icons.edit,
-                  size: 18,
-                  color: Color(0xFF50321B),
-                ),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: onDelete,
-                child: const Icon(
-                  Icons.delete,
-                  size: 18,
-                  color: Colors.red,
-                ),
-              ),
-            ],
-          ),
-          if (address.title.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              address.title,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF50321B),
-              ),
-            ),
-          ],
-          const SizedBox(height: 8),
-          Text(
-            fullAddress,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: Color(0xFF2F3036),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class Address {
-  final String id;
-  final String type;
-  final String title;
-  final String city;
-  final String street;
-  final String house;
-  final String apartment;
-
-  Address({
-    required this.id,
-    required this.type,
-    this.title = '',
-    required this.city,
-    required this.street,
-    required this.house,
-    this.apartment = '',
-  });
 } 

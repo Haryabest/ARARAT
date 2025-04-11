@@ -864,6 +864,46 @@ class OrderService {
             continue;
           }
           
+          // Обрабатываем товары, исправляя URL изображений
+          List<Map<String, dynamic>> processedItems = [];
+          if (originalData['items'] != null) {
+            final items = originalData['items'] as List<dynamic>;
+            for (var item in items) {
+              if (item is Map<String, dynamic>) {
+                // Клонируем элемент
+                Map<String, dynamic> processedItem = Map.from(item);
+                
+                // Проверяем изображение
+                if (item.containsKey('imageUrl') && item['imageUrl'] != null) {
+                  String? imageUrl = item['imageUrl'] as String?;
+                  
+                  // Если URL начинается с 'assets/' - это локальный ресурс
+                  if (imageUrl != null && imageUrl.startsWith('assets/')) {
+                    print('Найдено локальное изображение: $imageUrl');
+                    // Оставляем как есть, будет обработано на стороне UI
+                  }
+                  
+                  // Если просто имя файла или путь без http
+                  else if (imageUrl != null && !imageUrl.startsWith('http')) {
+                    // Если начинается с "/", это путь от корня
+                    if (imageUrl.startsWith('/')) {
+                      imageUrl = 'https://firebasestorage.googleapis.com/v0/b/ararat-efa6f.appspot.com/o${Uri.encodeComponent(imageUrl)}?alt=media';
+                    } else {
+                      imageUrl = 'https://firebasestorage.googleapis.com/v0/b/ararat-efa6f.appspot.com/o/${Uri.encodeComponent(imageUrl)}?alt=media';
+                    }
+                    processedItem['imageUrl'] = imageUrl;
+                    print('Преобразован URL изображения: $imageUrl');
+                  }
+                }
+                
+                processedItems.add(processedItem);
+              } else {
+                // Если это не карта, просто добавляем как есть
+                processedItems.add(item as Map<String, dynamic>);
+              }
+            }
+          }
+          
           // Получаем основные детали из оригинальных данных заказа
           historyItems.add({
             'id': orderId,
@@ -871,7 +911,7 @@ class OrderService {
                 ? (data['deletedAt'] as Timestamp).toDate() 
                 : DateTime.now(),
             'restorable': data['restorable'] ?? false,
-            'items': originalData['items'] ?? [],
+            'items': processedItems.isNotEmpty ? processedItems : (originalData['items'] ?? []),
             'total': originalData['total'] ?? 0.0,
             'status': originalData['status'] ?? 'удален',
             'createdAt': originalData['createdAt'] is Timestamp 
@@ -919,6 +959,9 @@ class OrderService {
         throw Exception('Этот заказ невозможно восстановить');
       }
 
+      // Текущее время для обновления
+      final now = FieldValue.serverTimestamp();
+      
       // Восстанавливаем заказ в основной коллекции пользователя
       await _firestore
           .collection('users')
@@ -927,8 +970,8 @@ class OrderService {
           .doc(orderId)
           .set({
         'orderId': orderId,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'status': historyData['originalData']['status'],
+        'updatedAt': now,
+        'status': 'новый', // Всегда устанавливаем статус "новый" при восстановлении
         'createdAt': historyData['originalData']['createdAt'],
         // Копируем остальные важные поля
         'total': historyData['originalData']['total'],
@@ -941,8 +984,10 @@ class OrderService {
       // Обновляем метаданные в основной коллекции заказов
       await _ordersCollection.doc(orderId).update({
         'isDeleted': false,
-        'restoredAt': FieldValue.serverTimestamp(),
+        'status': 'новый', // Устанавливаем статус "новый" и в основной коллекции
+        'restoredAt': now,
         'restoredBy': user.uid,
+        'lastUpdatedAt': now,
       });
 
       // Удаляем заказ из истории
@@ -953,7 +998,7 @@ class OrderService {
           .doc(orderId)
           .delete();
 
-      print('Заказ успешно восстановлен из истории: $orderId');
+      print('Заказ успешно восстановлен из истории с новым статусом: $orderId');
     } catch (e) {
       print('Ошибка при восстановлении заказа из истории: $e');
       throw e;

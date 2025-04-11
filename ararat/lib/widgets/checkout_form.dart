@@ -5,6 +5,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
 import 'package:ararat/services/order_service.dart';
+import 'package:ararat/services/address_service.dart';
+import 'package:ararat/models/address_model.dart';
 
 // Модель для товара в заказе
 class OrderItem {
@@ -68,6 +70,9 @@ class _CheckoutFormState extends State<CheckoutForm> {
     'scheduled': 1.2, // Доставка к определенному времени: +20% к базовой стоимости
   };
   
+  // Сервис для работы с адресами
+  final AddressService _addressService = AddressService();
+  
   static const int deliveryTypePickup = 0;
   static const int deliveryTypeDelivery = 1;
   
@@ -78,6 +83,44 @@ class _CheckoutFormState extends State<CheckoutForm> {
   
   // Переменная для отслеживания процесса загрузки
   bool _isLoading = false;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadDefaultAddress();
+  }
+  
+  // Загрузка адреса по умолчанию
+  Future<void> _loadDefaultAddress() async {
+    try {
+      setState(() => _isLoading = true);
+      
+      final defaultAddress = await _addressService.getDefaultAddress();
+      
+      if (defaultAddress != null && mounted) {
+        setState(() {
+          // Заполняем поля формы данными из адреса по умолчанию
+          _addressController.text = '${defaultAddress.city}, ${defaultAddress.street}, д. ${defaultAddress.house}';
+          _entranceController.text = defaultAddress.entrance;
+          _intercomController.text = defaultAddress.intercom;
+          _apartmentOfficeController.text = defaultAddress.apartment;
+          _floorController.text = defaultAddress.floor;
+          _isApartment = defaultAddress.type != 'Рабочий';
+          
+          // Сохраняем также исходные данные для возможного использования при отправке
+          _selectedAddress = defaultAddress.fullAddress;
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      print('Ошибка при загрузке адреса по умолчанию: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
   
   // Получить стоимость доставки на основе типа и общей суммы заказа
   double getDeliveryCost(double orderTotal) {
@@ -122,191 +165,204 @@ class _CheckoutFormState extends State<CheckoutForm> {
           topRight: Radius.circular(16),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          // Заголовок формы
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Оформление заказа',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Заголовок формы
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Оформление заказа',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
               ),
-            ),
+              
+              // Индикатор свайпа
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ),
+              
+              // Содержимое формы - используем Expanded вместе с SingleChildScrollView
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Блок доставки
+                        _buildSectionTitle('Доставка'),
+                        const SizedBox(height: 16),
+                        
+                        // Выбор типа доставки
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C4425),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildDeliveryTypeSelector(),
+                              const SizedBox(height: 16),
+                              _buildAddressFields(),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Блок контактной информации
+                        _buildSectionTitle('Контактная информация'),
+                        const SizedBox(height: 16),
+                        
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C4425),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            children: [
+                              // Телефон
+                              CustomFormField(
+                                controller: _phoneController,
+                                label: 'Телефон',
+                                isRequired: true,
+                                keyboardType: TextInputType.phone,
+                                isAuthScreen: true,
+                                labelColor: Colors.white,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Введите номер телефона';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              // Оставить у двери
+                              _buildLeaveAtDoorSwitch(),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Блок комментария
+                        _buildSectionTitle('Комментарий к заказу'),
+                        const SizedBox(height: 16),
+                        
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C4425),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          padding: const EdgeInsets.all(16),
+                          child: TextField(
+                            controller: _commentController,
+                            maxLines: 3,
+                            decoration: InputDecoration(
+                              hintText: 'Например: позвонить по прибытии',
+                              hintStyle: TextStyle(
+                                color: Colors.white.withOpacity(0.5),
+                                fontFamily: 'Inter',
+                                fontSize: 14,
+                              ),
+                              filled: false,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
+                              ),
+                              contentPadding: const EdgeInsets.all(16),
+                            ),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Блок оплаты
+                        _buildSectionTitle('Способ оплаты'),
+                        const SizedBox(height: 16),
+                        
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C4425),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: _buildPaymentMethodSelector(),
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Добавляем общую сумму заказа с учетом доставки и чаевых
+                        _buildTotalAmount(),
+                        
+                        // Кнопка подтверждения заказа
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: ElevatedButton(
+                            onPressed: _submitOrder,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF50321B),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: const Text(
+                              'Подтвердить заказ',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          
-          // Индикатор свайпа
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.5),
-                  borderRadius: BorderRadius.circular(2),
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.4),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  color: Colors.white,
                 ),
               ),
             ),
-          ),
-          
-          // Содержимое формы - используем Expanded вместе с SingleChildScrollView
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Блок доставки
-                    _buildSectionTitle('Доставка'),
-                    const SizedBox(height: 16),
-                    
-                    // Выбор типа доставки
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6C4425),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildDeliveryTypeSelector(),
-                          const SizedBox(height: 16),
-                          _buildAddressFields(),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    
-                    // Блок контактной информации
-                    _buildSectionTitle('Контактная информация'),
-                    const SizedBox(height: 16),
-                    
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6C4425),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          // Телефон
-                          CustomFormField(
-                            controller: _phoneController,
-                            label: 'Телефон',
-                            isRequired: true,
-                            keyboardType: TextInputType.phone,
-                            isAuthScreen: true,
-                            labelColor: Colors.white,
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Введите номер телефона';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          
-                          // Оставить у двери
-                          _buildLeaveAtDoorSwitch(),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    
-                    // Блок комментария
-                    _buildSectionTitle('Комментарий к заказу'),
-                    const SizedBox(height: 16),
-                    
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6C4425),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.all(16),
-                      child: TextField(
-                        controller: _commentController,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          hintText: 'Например: позвонить по прибытии',
-                          hintStyle: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontFamily: 'Inter',
-                            fontSize: 14,
-                          ),
-                          filled: false,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: Color(0xFF50321B), width: 1.5),
-                          ),
-                          contentPadding: const EdgeInsets.all(16),
-                        ),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'Inter',
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    
-                    // Блок оплаты
-                    _buildSectionTitle('Способ оплаты'),
-                    const SizedBox(height: 16),
-                    
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF6C4425),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: _buildPaymentMethodSelector(),
-                    ),
-                    const SizedBox(height: 24),
-                    
-                    // Добавляем общую сумму заказа с учетом доставки и чаевых
-                    _buildTotalAmount(),
-                    
-                    // Кнопка подтверждения заказа
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: ElevatedButton(
-                        onPressed: _submitOrder,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF50321B),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: const Text(
-                          'Подтвердить заказ',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                  ],
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -487,80 +543,181 @@ class _CheckoutFormState extends State<CheckoutForm> {
           ),
           const SizedBox(height: 16),
           
-          GestureDetector(
-            onTap: () async {
-              final selectedLocation = await Navigator.push<LatLng>(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => MapScreen(
-                    onAddressSelected: (address, location) {
-                      setState(() {
-                        _selectedLocation = location;
-                        _addressController.text = address;
-                      });
-                    },
-                  ),
-                ),
-              );
-              
-              if (selectedLocation != null) {
-                setState(() {
-                  _selectedLocation = selectedLocation;
-                  _addressController.text = 'Адрес выбран на карте';
-                });
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF50321B),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: const Color(0xFF50321B).withOpacity(0.5),
-                  width: 1.5,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  )
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _addressController.text.isEmpty 
-                          ? 'Выбрать адрес на карте'
-                          : _addressController.text,
-                      style: TextStyle(
-                        color: _addressController.text.isEmpty 
-                            ? Colors.white.withOpacity(0.7)
-                            : Colors.white,
-                        fontFamily: 'Inter',
-                        fontSize: 14,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                  Container(
-                    padding: EdgeInsets.all(8),
+          // Добавляем выбор между картой и сохраненными адресами
+          Row(
+            children: [
+              // Кнопка выбора из сохраненных адресов
+              Expanded(
+                child: GestureDetector(
+                  onTap: _showSavedAddresses,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF6C4425),
-                      shape: BoxShape.circle,
+                      color: const Color(0xFF50321B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF50321B).withOpacity(0.5),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        )
+                      ],
                     ),
-                    child: Icon(
-                      Icons.map,
-                      color: Colors.white,
-                      size: 16,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Сохраненные адреса',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                        Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C4425),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.list,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
+              ),
+              
+              const SizedBox(width: 12),
+              
+              // Кнопка выбора адреса на карте
+              Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    final selectedLocation = await Navigator.push<LatLng>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MapScreen(
+                          onAddressSelected: (address, location) {
+                            setState(() {
+                              _selectedLocation = location;
+                              _addressController.text = address;
+                            });
+                          },
+                        ),
+                      ),
+                    );
+                    
+                    if (selectedLocation != null) {
+                      setState(() {
+                        _selectedLocation = selectedLocation;
+                        _addressController.text = 'Адрес выбран на карте';
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF50321B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF50321B).withOpacity(0.5),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        )
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Выбрать на карте',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                        Container(
+                          padding: EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C4425),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.map,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // Поле отображения выбранного адреса
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF50321B).withOpacity(0.3),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.1),
+                width: 1,
               ),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Выбранный адрес:',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.7),
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _addressController.text.isEmpty 
+                      ? 'Пожалуйста, выберите адрес' 
+                      : _addressController.text,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
+          
           const SizedBox(height: 20),
           
           // Разделитель для визуального отделения
@@ -1265,7 +1422,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
       return;
     }
     
-    // Собираем данные о адресе доставки
+    // Собираем данные о адресе доставки с учетом всех полей
     final deliveryAddress = {
       'address': _addressController.text,
       'entrance': _entranceController.text,
@@ -1273,7 +1430,7 @@ class _CheckoutFormState extends State<CheckoutForm> {
       'apartmentOffice': _apartmentOfficeController.text,
       'floor': _floorController.text,
       'isApartment': _isApartment,
-      'fullAddress': '${_addressController.text}, ${_isApartment ? 'кв.' : 'офис'} ${_apartmentOfficeController.text}${_entranceController.text.isNotEmpty ? ', подъезд ${_entranceController.text}' : ''}${_floorController.text.isNotEmpty ? ', этаж ${_floorController.text}' : ''}',
+      'fullAddress': _formatFullAddressForDelivery(),
       'location': _selectedLocation != null 
           ? {'latitude': _selectedLocation!.latitude, 'longitude': _selectedLocation!.longitude} 
           : null,
@@ -1412,5 +1569,315 @@ class _CheckoutFormState extends State<CheckoutForm> {
         );
       }
     }
+  }
+
+  // Метод для форматирования полного адреса с учетом всех заполненных полей
+  String _formatFullAddressForDelivery() {
+    List<String> addressParts = [_addressController.text];
+    
+    // Добавляем информацию о квартире/офисе
+    if (_apartmentOfficeController.text.isNotEmpty) {
+      addressParts.add('${_isApartment ? 'кв.' : 'офис'} ${_apartmentOfficeController.text}');
+    }
+    
+    // Добавляем информацию о подъезде
+    if (_entranceController.text.isNotEmpty) {
+      addressParts.add('подъезд ${_entranceController.text}');
+    }
+    
+    // Добавляем информацию об этаже
+    if (_floorController.text.isNotEmpty) {
+      addressParts.add('этаж ${_floorController.text}');
+    }
+    
+    // Добавляем информацию о домофоне
+    if (_intercomController.text.isNotEmpty) {
+      addressParts.add('домофон ${_intercomController.text}');
+    }
+    
+    return addressParts.join(', ');
+  }
+
+  // Добавим метод для выбора из сохраненных адресов
+  Future<void> _showSavedAddresses() async {
+    setState(() => _isLoading = true);
+    
+    try {
+      final addresses = await _addressService.getAddresses();
+      
+      if (!mounted) return;
+      
+      setState(() => _isLoading = false);
+      
+      if (addresses.isEmpty) {
+        // Вместо просто уведомления, предложим перейти к экрану управления адресами
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: const Color(0xFFA99378),
+            title: const Text(
+              'У вас нет сохраненных адресов',
+              style: TextStyle(
+                color: Colors.white,
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            content: const Text(
+              'Хотите добавить новый адрес?',
+              style: TextStyle(
+                color: Colors.white,
+                fontFamily: 'Inter',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Отмена',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _navigateToAddressManagement();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF50321B),
+                ),
+                child: const Text(
+                  'Добавить',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+      
+      // Показываем диалог с выбором адреса
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (context) => Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          decoration: const BoxDecoration(
+            color: Color(0xFFA99378),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(16),
+              topRight: Radius.circular(16),
+            ),
+          ),
+          child: Column(
+            children: [
+              // Заголовок
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _navigateToAddressManagement();
+                      },
+                      child: const Text(
+                        'Управление',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontFamily: 'Inter',
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Выберите адрес',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'Inter',
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Список адресов
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: addresses.length,
+                  itemBuilder: (context, index) {
+                    final address = addresses[index];
+                    final bool isDefault = address.isDefault;
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      color: const Color(0xFF6C4425),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(
+                          color: isDefault ? Colors.white : Colors.transparent,
+                          width: isDefault ? 2 : 0,
+                        ),
+                      ),
+                      child: InkWell(
+                        onTap: () {
+                          // Выбираем этот адрес
+                          setState(() {
+                            _addressController.text = address.fullAddress;
+                            _entranceController.text = address.entrance;
+                            _intercomController.text = address.intercom;
+                            _apartmentOfficeController.text = address.apartment;
+                            _floorController.text = address.floor;
+                            _isApartment = address.type != 'Рабочий';
+                            _selectedAddress = address.fullAddress;
+                          });
+                          Navigator.pop(context);
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Иконка типа адреса
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF50321B),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  address.type == 'Домашний' ? Icons.home 
+                                  : address.type == 'Рабочий' ? Icons.business 
+                                  : Icons.location_on,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              
+                              // Информация об адресе
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      address.title.isNotEmpty ? address.title : address.type,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontFamily: 'Inter',
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      address.fullAddress,
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.9),
+                                        fontFamily: 'Inter',
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    if (address.apartment.isNotEmpty || 
+                                        address.entrance.isNotEmpty || 
+                                        address.floor.isNotEmpty || 
+                                        address.intercom.isNotEmpty)
+                                      const SizedBox(height: 4),
+                                    if (address.apartment.isNotEmpty)
+                                      Text(
+                                        '${address.type == "Рабочий" ? "Офис" : "Квартира"}: ${address.apartment}',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.8),
+                                          fontFamily: 'Inter',
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    if (address.entrance.isNotEmpty || address.floor.isNotEmpty)
+                                      Text(
+                                        'Подъезд: ${address.entrance}${address.floor.isNotEmpty ? ', Этаж: ${address.floor}' : ''}',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.8),
+                                          fontFamily: 'Inter',
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    if (address.intercom.isNotEmpty)
+                                      Text(
+                                        'Домофон: ${address.intercom}',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.8),
+                                          fontFamily: 'Inter',
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              if (isDefault)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Text(
+                                    'По умолчанию',
+                                    style: TextStyle(
+                                      color: Color(0xFF50321B),
+                                      fontFamily: 'Inter',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      setState(() => _isLoading = false);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при загрузке адресов: $e'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  // Добавляем метод для навигации к экрану управления адресами
+  void _navigateToAddressManagement() {
+    Navigator.of(context).pushNamed('/profile/addresses').then((_) {
+      // После возвращения с экрана управления адресами, проверяем наличие адреса по умолчанию
+      _loadDefaultAddress();
+    });
   }
 } 
