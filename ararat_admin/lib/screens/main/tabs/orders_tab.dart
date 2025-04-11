@@ -98,6 +98,16 @@ class _OrdersTabState extends State<OrdersTab> {
         return 'Доставлен';
       case 'canceled':
         return 'Отменен';
+      case 'новый':
+        return 'Новый';
+      case 'в обработке':
+        return 'В обработке';
+      case 'отправлен':
+        return 'Отправлен';
+      case 'доставлен':
+        return 'Доставлен';
+      case 'отменен':
+        return 'Отменен';
       case '':
         return 'Новый'; // Пустой статус считаем как "Новый"
       case null:
@@ -113,14 +123,19 @@ class _OrdersTabState extends State<OrdersTab> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'new':
+      case 'новый':
         return Colors.blue;
       case 'processing':
+      case 'в обработке':
         return Colors.orange;
       case 'shipped':
+      case 'отправлен':
         return Colors.purple;
       case 'delivered':
+      case 'доставлен':
         return Colors.green;
       case 'canceled':
+      case 'отменен':
         return Colors.red;
       default:
         return Colors.grey;
@@ -156,7 +171,7 @@ class _OrdersTabState extends State<OrdersTab> {
     }
     
     // Для активных заказов без явного статуса используем "Новый"
-    return _getStatusText(order['status'] ?? order['orderStatus'] ?? 'new');
+    return _getStatusText(order['status'] ?? order['orderStatus'] ?? 'новый');
   }
 
   // Определяет цвет статуса заказа с учетом отмены/удаления
@@ -181,7 +196,7 @@ class _OrdersTabState extends State<OrdersTab> {
     }
     
     // Для остальных заказов
-    return _getStatusColor(order['status'] ?? 'new');
+    return _getStatusColor(order['status'] ?? 'новый');
   }
 
   // Фильтрует заказы по выбранному статусу
@@ -304,7 +319,7 @@ class _OrdersTabState extends State<OrdersTab> {
                     itemCount: filteredOrders.length,
                     itemBuilder: (context, index) {
                       final order = filteredOrders[index];
-                      final status = order['status'] ?? 'new';
+                      final status = order['status'] ?? 'новый';
                       final timestamp = order['createdAt'] as Timestamp?;
                       final date = timestamp != null
                           ? DateTime.fromMillisecondsSinceEpoch(
@@ -854,7 +869,7 @@ class _OrdersTabState extends State<OrdersTab> {
   
   // Метод для изменения статуса заказа
   void _changeOrderStatus(Map<String, dynamic> order) {
-    final currentStatus = order['status'] ?? 'new';
+    final currentStatus = order['status'] ?? 'новый';
     String newStatus = currentStatus; // Инициализируем текущим статусом
     
     showDialog(
@@ -869,7 +884,7 @@ class _OrdersTabState extends State<OrdersTab> {
                 children: [
                   RadioListTile<String>(
                     title: const Text('Новый'),
-                    value: 'new',
+                    value: 'новый',
                     groupValue: newStatus,
                     onChanged: (value) {
                       setState(() {
@@ -880,7 +895,7 @@ class _OrdersTabState extends State<OrdersTab> {
                   ),
                   RadioListTile<String>(
                     title: const Text('В обработке'),
-                    value: 'processing',
+                    value: 'в обработке',
                     groupValue: newStatus,
                     onChanged: (value) {
                       setState(() {
@@ -891,7 +906,7 @@ class _OrdersTabState extends State<OrdersTab> {
                   ),
                   RadioListTile<String>(
                     title: const Text('Отправлен'),
-                    value: 'shipped',
+                    value: 'отправлен',
                     groupValue: newStatus,
                     onChanged: (value) {
                       setState(() {
@@ -902,7 +917,7 @@ class _OrdersTabState extends State<OrdersTab> {
                   ),
                   RadioListTile<String>(
                     title: const Text('Доставлен'),
-                    value: 'delivered',
+                    value: 'доставлен',
                     groupValue: newStatus,
                     onChanged: (value) {
                       setState(() {
@@ -913,7 +928,7 @@ class _OrdersTabState extends State<OrdersTab> {
                   ),
                   RadioListTile<String>(
                     title: const Text('Отменен'),
-                    value: 'canceled',
+                    value: 'отменен',
                     groupValue: newStatus,
                     onChanged: (value) {
                       setState(() {
@@ -969,6 +984,7 @@ class _OrdersTabState extends State<OrdersTab> {
       
       final orderData = orderDoc.data() as Map<String, dynamic>;
       final String userId = orderData['userId'] ?? '';
+      final bool isCurrentlyDeleted = orderData['isDeleted'] == true;
       
       // Текущее время для обновления
       final now = FieldValue.serverTimestamp();
@@ -981,17 +997,33 @@ class _OrdersTabState extends State<OrdersTab> {
       };
       
       // Обновляем поле isCancelled, если статус "отменен"
-      if (newStatus == 'canceled' || newStatus == 'отменен') {
+      if (newStatus == 'отменен') {
         updateData['isCancelled'] = true;
         updateData['cancelledAt'] = now;
         updateData['cancelledBy'] = 'admin'; // Указываем, что отменено администратором
-      } else if (newStatus == 'new' || newStatus == 'processing' || 
-                 newStatus == 'shipped' || newStatus == 'delivered') {
+        
+        // Если заказ был удалён, восстанавливаем его (убираем флаг isDeleted)
+        if (isCurrentlyDeleted) {
+          updateData['isDeleted'] = false;
+          updateData['restoredAt'] = now;
+          updateData['restoredBy'] = 'admin';
+          print('Восстанавливаем удалённый заказ с новым статусом: $newStatus');
+        }
+      } else if (newStatus == 'новый' || newStatus == 'в обработке' || 
+                 newStatus == 'отправлен' || newStatus == 'доставлен') {
         updateData['isCancelled'] = false;
+        
+        // Если заказ был удалён, восстанавливаем его (убираем флаг isDeleted)
+        if (isCurrentlyDeleted) {
+          updateData['isDeleted'] = false;
+          updateData['restoredAt'] = now;
+          updateData['restoredBy'] = 'admin';
+          print('Восстанавливаем удалённый заказ с новым статусом: $newStatus');
+        }
       }
       
       // Если меняем на "доставлен", добавляем дату доставки
-      if (newStatus == 'delivered') {
+      if (newStatus == 'доставлен') {
         updateData['deliveredAt'] = now;
       }
       
@@ -1004,23 +1036,8 @@ class _OrdersTabState extends State<OrdersTab> {
           final userOrderRef = _firestore.collection('users').doc(userId).collection('orders').doc(orderId);
           final userOrderDoc = await userOrderRef.get();
           
-          if (userOrderDoc.exists) {
-            Map<String, dynamic> userUpdateData = {
-              'status': newStatus,
-              'updatedAt': now,
-            };
-            
-            // Синхронизируем данные об отмене, если статус "отменен"
-            if (newStatus == 'canceled' || newStatus == 'отменен') {
-              userUpdateData['isCancelled'] = true;
-            } else if (newStatus == 'new' || newStatus == 'processing' || 
-                     newStatus == 'shipped' || newStatus == 'delivered') {
-              userUpdateData['isCancelled'] = false;
-            }
-            
-            await userOrderRef.update(userUpdateData);
-            print('Статус заказа успешно обновлен в коллекции пользователя');
-          } else if (newStatus != 'canceled' && newStatus != 'отменен') {
+          // Если заказ был удалён и теперь восстановлен, или заказ не существует в активной коллекции
+          if (isCurrentlyDeleted || !userOrderDoc.exists) {
             // Проверяем, не находится ли заказ в истории пользователя
             final userHistoryRef = _firestore
                 .collection('users')
@@ -1038,7 +1055,8 @@ class _OrdersTabState extends State<OrdersTab> {
               // Обновляем данные заказа и возвращаем его в активные
               originalData['status'] = newStatus;
               originalData['updatedAt'] = now;
-              originalData['isCancelled'] = false;
+              originalData['isCancelled'] = newStatus == 'отменен';
+              originalData['isDeleted'] = false;
               
               // Создаем заказ в коллекции заказов пользователя
               await _firestore
@@ -1051,7 +1069,34 @@ class _OrdersTabState extends State<OrdersTab> {
               // Удаляем из истории
               await userHistoryRef.delete();
               print('Заказ восстановлен из истории пользователя с новым статусом: $newStatus');
+            } else {
+              // Если в истории не найдено, создаем новый заказ на основе данных из основной коллекции
+              Map<String, dynamic> newOrderData = Map<String, dynamic>.from(orderData);
+              newOrderData['status'] = newStatus;
+              newOrderData['updatedAt'] = now;
+              newOrderData['isCancelled'] = newStatus == 'отменен';
+              newOrderData['isDeleted'] = false;
+              
+              await userOrderRef.set(newOrderData);
+              print('Создан новый заказ в коллекции пользователя с статусом: $newStatus');
             }
+          } else if (userOrderDoc.exists) {
+            // Если заказ существует в коллекции пользователя, просто обновляем его
+            Map<String, dynamic> userUpdateData = {
+              'status': newStatus,
+              'updatedAt': now,
+            };
+            
+            // Синхронизируем данные об отмене, если статус "отменен"
+            if (newStatus == 'отменен') {
+              userUpdateData['isCancelled'] = true;
+            } else if (newStatus == 'новый' || newStatus == 'в обработке' || 
+                     newStatus == 'отправлен' || newStatus == 'доставлен') {
+              userUpdateData['isCancelled'] = false;
+            }
+            
+            await userOrderRef.update(userUpdateData);
+            print('Статус заказа успешно обновлен в коллекции пользователя');
           }
         } catch (e) {
           print('Ошибка при обновлении статуса в коллекции пользователя: $e');
