@@ -1156,66 +1156,22 @@ class _OrdersTabState extends State<OrdersTab> {
   String _getCustomerName(Map<String, dynamic> order) {
     print('Определение логина пользователя для заказа: ${order['id']}');
     
-    // Сначала проверяем номер телефона (как на скриншоте)
-    if (order['phoneNumber'] != null) {
-      String phone = order['phoneNumber'].toString();
-      // Проверяем, если это телефон для заказа pidor с почтой admin@a.ru
-      if (phone.contains("2355696999668")) {
-        return "pidor";
-      }
+    // 0. Проверяем кэш имен, если известен userId
+    if (order['userId'] != null && _userNameCache.containsKey(order['userId'])) {
+      print('Имя найдено в кэше: ${_userNameCache[order['userId']]}');
+      return _userNameCache[order['userId']]!;
     }
     
-    // Проверяем email на совпадения с известными пользователями
-    String? email = order['email'] ?? order['userEmail'] ?? order['user']?['email'];
-    if (email != null) {
-      print('Проверяем email: $email');
-      
-      // Проверяем конкретные известные email
-      if (email.contains("admin@c.ru")) {
-        return "abella";
-      }
-      if (email.contains("admin@a.ru")) {
-        return "pidor";
-      }
-      if (email.contains("admin@mail.ru")) {
-        return "admin";
-      }
-      if (email.contains("admin@ad.ru")) {
-        return "pisika";
-      }
-      if (email.contains("zalupa@chlen.ru")) {
-        return "zalupa@chlen.ru";
-      }
-      
-      // Если конкретного совпадения нет, берем имя из email
-      if (email.contains('@')) {
-        String username = email.split('@')[0];
-        print('Получено имя из email: $username');
-        return username;
-      }
-      return email;
-    }
+    // 1. Проверяем прямые поля имени пользователя в порядке приоритета
     
-    // Проверяем displayName (прямой приоритет)
+    // Проверяем displayName (высший приоритет)
     if (order['displayName'] != null && order['displayName'].toString().trim().isNotEmpty) {
       return order['displayName'];
-    }
-    
-    // Проверяем вложенный displayName в user
-    if (order['user'] is Map && order['user']['displayName'] != null && 
-        order['user']['displayName'].toString().trim().isNotEmpty) {
-      return order['user']['displayName'];
     }
     
     // Проверяем username
     if (order['username'] != null && order['username'].toString().trim().isNotEmpty) {
       return order['username'];
-    }
-    
-    // Проверяем вложенный username в user
-    if (order['user'] is Map && order['user']['username'] != null && 
-        order['user']['username'].toString().trim().isNotEmpty) {
-      return order['user']['username'];
     }
     
     // Проверяем userName
@@ -1228,20 +1184,121 @@ class _OrdersTabState extends State<OrdersTab> {
       return order['customerName'];
     }
     
-    return 'Не указан';
+    // 2. Проверяем вложенные объекты пользователя
+    
+    // Проверяем вложенный displayName в user
+    if (order['user'] is Map && order['user']['displayName'] != null && 
+        order['user']['displayName'].toString().trim().isNotEmpty) {
+      return order['user']['displayName'];
+    }
+    
+    // Проверяем вложенный username в user
+    if (order['user'] is Map && order['user']['username'] != null && 
+        order['user']['username'].toString().trim().isNotEmpty) {
+      return order['user']['username'];
+    }
+    
+    // 3. Проверяем userId и загружаем данные пользователя
+    if (order['userId'] != null && order['userId'].toString().trim().isNotEmpty) {
+      String userId = order['userId'];
+      // Запускаем асинхронную загрузку имени
+      _loadUserNameAsync(userId, order['id']);
+      
+      // Возвращаем временную заглушку до загрузки полного имени
+      return 'Загрузка...';
+    }
+    
+    // 4. Извлекаем имя из email, если доступен
+    String? email = order['email'] ?? order['userEmail'] ?? order['user']?['email'];
+    if (email != null && email.toString().trim().isNotEmpty) {
+      if (email.contains('@')) {
+        String username = email.split('@')[0];
+        // Улучшение читаемости имен из email
+        username = username.replaceAll(RegExp(r'\d+$'), ''); // Убираем цифры в конце
+        username = username.replaceAll('.', ' '); // Заменяем точки на пробелы
+        
+        // Приводим к нормальному формату имени
+        List<String> parts = username.split(' ');
+        for (int i = 0; i < parts.length; i++) {
+          if (parts[i].isNotEmpty) {
+            parts[i] = parts[i][0].toUpperCase() + (parts[i].length > 1 ? parts[i].substring(1) : '');
+          }
+        }
+        username = parts.join(' ');
+        
+        return username;
+      }
+      return email;
+    }
+    
+    // 5. Используем номер телефона, если доступен
+    String? phone = order['phoneNumber'] ?? order['phone'] ?? order['customer']?['phone'] ?? order['user']?['phone'];
+    if (phone != null && phone.toString().trim().isNotEmpty) {
+      return 'Клиент с телефоном: ${_formatPhone(phone)}';
+    }
+    
+    // Если ничего не найдено
+    return 'Неизвестный клиент';
   }
   
-  // Загружаем информацию о пользователе из Firestore
-  void _loadUserName(String userId) async {
-    print('Запрос информации о пользователе: $userId');
+  // Форматирование номера телефона для удобочитаемости
+  String _formatPhone(String phone) {
+    // Убираем все нецифровые символы
+    String cleanPhone = phone.replaceAll(RegExp(r'[^\d]'), '');
+    
+    // Для российских номеров делаем красивый формат
+    if (cleanPhone.length == 11 && (cleanPhone.startsWith('7') || cleanPhone.startsWith('8'))) {
+      return '+7 ${cleanPhone.substring(1, 4)} ${cleanPhone.substring(4, 7)}-${cleanPhone.substring(7, 9)}-${cleanPhone.substring(9, 11)}';
+    }
+    
+    // Для других номеров просто возвращаем как есть
+    return phone;
+  }
+  
+  // Асинхронная загрузка имени пользователя из коллекции users
+  Future<void> _loadUserNameAsync(String userId, String orderId) async {
     try {
       final userDoc = await _firestore.collection('users').doc(userId).get();
       if (userDoc.exists) {
-        final userData = userDoc.data();
-        print('Данные пользователя получены:');
-        print('Email: ${userData?['email']}');
-        print('DisplayName: ${userData?['displayName']}');
-        print('Username: ${userData?['username']}');
+        final userData = userDoc.data() as Map<String, dynamic>;
+        print('Данные пользователя для заказа $orderId получены:');
+        print('displayName: ${userData['displayName']}, username: ${userData['username']}, email: ${userData['email']}');
+        
+        String userName = 'Неизвестный пользователь';
+        
+        // Ищем имя пользователя в полученных данных в порядке приоритета
+        if (userData['displayName'] != null && userData['displayName'].toString().trim().isNotEmpty) {
+          userName = userData['displayName'];
+        } else if (userData['username'] != null && userData['username'].toString().trim().isNotEmpty) {
+          userName = userData['username'];
+        } else if (userData['email'] != null && userData['email'].toString().trim().isNotEmpty) {
+          String email = userData['email'];
+          if (email.contains('@')) {
+            userName = email.split('@')[0].replaceAll('.', ' ');
+            // Приводим к формату имени
+            List<String> parts = userName.split(' ');
+            for (int i = 0; i < parts.length; i++) {
+              if (parts[i].isNotEmpty) {
+                parts[i] = parts[i][0].toUpperCase() + (parts[i].length > 1 ? parts[i].substring(1) : '');
+              }
+            }
+            userName = parts.join(' ');
+          } else {
+            userName = email;
+          }
+        }
+        
+        print('Найдено имя пользователя: $userName');
+        
+        // Обновляем кэш имен, чтобы использовать при следующем построении UI
+        _userNameCache[userId] = userName;
+        
+        // Обновляем UI, чтобы сразу отобразить новое имя
+        if (mounted) {
+          setState(() {
+            // Обновляем UI для отображения новых данных
+          });
+        }
       } else {
         print('Пользователь не найден в коллекции users');
       }
@@ -1249,6 +1306,9 @@ class _OrdersTabState extends State<OrdersTab> {
       print('Ошибка при загрузке данных пользователя: $e');
     }
   }
+  
+  // Кэш имен пользователей для быстрого доступа
+  final Map<String, String> _userNameCache = {};
 
   // Показывает диалог подтверждения удаления заказа
   void _showDeleteConfirmation(Map<String, dynamic> order) {
