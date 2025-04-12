@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ararat/constants/colors.dart';
 import 'package:ararat/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class UsersTab extends StatefulWidget {
   const UsersTab({super.key});
@@ -180,6 +181,13 @@ class _UsersTabState extends State<UsersTab> {
     final role = user['role'] as String? ?? AuthService.ROLE_USER;
     final isAdmin = role == AuthService.ROLE_ADMIN;
     
+    // Получаем текущего пользователя
+    final currentUser = FirebaseAuth.instance.currentUser;
+    
+    // Определяем, может ли текущий пользователь менять роль этого пользователя
+    // Администратор может понизить только себя, но не других администраторов
+    final canChangeRole = !isAdmin || (currentUser != null && currentUser.uid == user['id']);
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -200,6 +208,18 @@ class _UsersTabState extends State<UsersTab> {
               title: const Text('Роль'),
               subtitle: Text(isAdmin ? 'Администратор' : 'Пользователь'),
             ),
+            if (isAdmin && !canChangeRole)
+              const Padding(
+                padding: EdgeInsets.all(8.0),
+                child: Text(
+                  'Примечание: Вы не можете изменить роль другого администратора',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
           ],
         ),
         actions: [
@@ -210,11 +230,16 @@ class _UsersTabState extends State<UsersTab> {
             child: const Text('Закрыть'),
           ),
           TextButton(
-            onPressed: () {
-              // Изменить роль пользователя
-              _changeUserRole(user);
-              Navigator.of(context).pop();
-            },
+            onPressed: canChangeRole
+                ? () {
+                    // Изменить роль пользователя
+                    _changeUserRole(user);
+                    Navigator.of(context).pop();
+                  }
+                : null, // Кнопка будет неактивна, если нельзя менять роль
+            style: TextButton.styleFrom(
+              foregroundColor: canChangeRole ? null : Colors.grey,
+            ),
             child: Text(isAdmin ? 'Сделать пользователем' : 'Сделать администратором'),
           ),
         ],
@@ -224,15 +249,59 @@ class _UsersTabState extends State<UsersTab> {
 
   Future<void> _changeUserRole(Map<String, dynamic> user) async {
     final userId = user['id'];
+    final email = user['email'] as String? ?? '';
+    final displayName = user['displayName'] as String? ?? 'Пользователь';
     final currentRole = user['role'] as String? ?? AuthService.ROLE_USER;
     final newRole = currentRole == AuthService.ROLE_ADMIN
         ? AuthService.ROLE_USER
         : AuthService.ROLE_ADMIN;
+    
+    // Получаем текущего пользователя (администратора, который выполняет действие)
+    final currentUser = FirebaseAuth.instance.currentUser;
+    
+    // Проверяем, не пытается ли администратор понизить роль другого администратора
+    if (currentRole == AuthService.ROLE_ADMIN && newRole == AuthService.ROLE_USER) {
+      // Если ID текущего пользователя не совпадает с ID пользователя, которого мы хотим понизить
+      if (currentUser != null && userId != currentUser.uid) {
+        // Показываем сообщение об ошибке
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Вы не можете понизить роль другого администратора'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return; // Прерываем выполнение метода
+      }
+    }
 
     try {
+      // Обновляем роль в документе пользователя
       await _firestore.collection('users').doc(userId).update({
         'role': newRole,
+        'roleUpdatedAt': FieldValue.serverTimestamp(),
       });
+      
+      // Если новая роль - администратор, добавляем в коллекцию admins
+      if (newRole == AuthService.ROLE_ADMIN) {
+        print('Добавление пользователя в коллекцию admins: $userId');
+        Map<String, dynamic> adminData = {
+          'email': email,
+          'displayName': displayName,
+          'createdAt': FieldValue.serverTimestamp(),
+          'addedBy': 'admin_panel',
+        };
+        await _firestore.collection('admins').doc(userId).set(adminData);
+        print('Пользователь успешно добавлен в коллекцию admins');
+      } 
+      // Если роль была понижена с администратора до обычного пользователя, удаляем из коллекции admins
+      else if (currentRole == AuthService.ROLE_ADMIN && newRole == AuthService.ROLE_USER) {
+        print('Удаление пользователя из коллекции admins: $userId');
+        await _firestore.collection('admins').doc(userId).delete();
+        print('Пользователь успешно удален из коллекции admins');
+      }
       
       // Проверяем mounted перед обновлением списка пользователей
       if (!mounted) return;
@@ -243,12 +312,15 @@ class _UsersTabState extends State<UsersTab> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Роль пользователя успешно изменена'),
+            content: Text(newRole == AuthService.ROLE_ADMIN 
+              ? 'Пользователь назначен администратором' 
+              : 'Пользователь лишен прав администратора'),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
+      print('Ошибка при изменении роли пользователя: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
