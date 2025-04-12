@@ -620,6 +620,8 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                 product.price.toInt(),
                                 product.weight,
                                 product.imageUrls.isNotEmpty ? product.imageUrls[0] : null,
+                                description: product.description,
+                                ingredients: product.ingredients,
                               );
                             },
                           ),
@@ -693,7 +695,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     );
   }
   
-  Widget _productCard(String name, int price, String weight, String? imageUrl) {
+  Widget _productCard(String name, int price, String weight, String? imageUrl, {String? description, String? ingredients}) {
     // Проверяем, находится ли товар в избранном и корзине
     final bool isFavorite = _favoritesManager.isFavorite(name);
     _cartManager.isInCart(name);
@@ -706,6 +708,8 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           'price': price,
           'weight': weight,
           'imageUrl': imageUrl ?? 'assets/icons/placeholder.png',
+          'description': description,
+          'ingredients': ingredients,
         };
         
         showProductDetailSheet(context, product).then((result) {
@@ -830,6 +834,8 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                   'price': price,
                                   'weight': weight,
                                   'imageUrl': imageUrl ?? 'assets/icons/placeholder.png',
+                                  'description': description,
+                                  'ingredients': ingredients,
                                 };
                                 _cartManager.addToCart(product);
                               },

@@ -8,6 +8,7 @@ class Product {
   final String weight;
   final bool available;
   final Map<String, dynamic>? additionalInfo;
+  final String? ingredients;
 
   Product({
     required this.id,
@@ -19,6 +20,7 @@ class Product {
     required this.weight,
     this.available = true,
     this.additionalInfo,
+    this.ingredients,
   });
 
   // Создание Product из Map (для Firestore)
@@ -56,6 +58,7 @@ class Product {
       weight: map['weight'] ?? '',
       available: map['available'] ?? map['inStock'] ?? true,
       additionalInfo: map['additionalInfo'],
+      ingredients: map['ingredients'],
     );
   }
 
@@ -70,6 +73,7 @@ class Product {
       'weight': weight,
       'available': available,
       'additionalInfo': additionalInfo,
+      'ingredients': ingredients,
     };
   }
 
@@ -84,6 +88,7 @@ class Product {
     String? weight,
     bool? available,
     Map<String, dynamic>? additionalInfo,
+    String? ingredients,
   }) {
     return Product(
       id: id ?? this.id,
@@ -95,6 +100,7 @@ class Product {
       weight: weight ?? this.weight,
       available: available ?? this.available,
       additionalInfo: additionalInfo ?? this.additionalInfo,
+      ingredients: ingredients ?? this.ingredients,
     );
   }
 } 
