@@ -419,45 +419,54 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
   // Метод для правильного отображения изображения в зависимости от источника
   Widget _buildProductImage(String? imageUrl) {
     if (imageUrl == null || imageUrl.isEmpty) {
-      return Image.asset(
-        'assets/icons/placeholder.png',
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.asset(
+          'assets/icons/placeholder.png',
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+        ),
       );
     }
     
     // Проверяем, является ли URL сетевым или локальным
     if (imageUrl.startsWith('http')) {
-      return CachedNetworkImage(
-        imageUrl: imageUrl,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        placeholder: (context, url) => const Center(
-          child: CircularProgressIndicator(
-            color: Colors.white,
-          ),
-        ),
-        errorWidget: (context, url, error) => Image.asset(
-          'assets/icons/placeholder.png',
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
+          placeholder: (context, url) => const Center(
+            child: CircularProgressIndicator(
+              color: Colors.white,
+            ),
+          ),
+          errorWidget: (context, url, error) => Image.asset(
+            'assets/icons/placeholder.png',
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+          ),
         ),
       );
     } else {
       // Для локальных ресурсов используем AssetImage
-      return Image.asset(
-        imageUrl,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder: (context, error, stackTrace) => Image.asset(
-          'assets/icons/placeholder.png',
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Image.asset(
+          imageUrl,
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
+          errorBuilder: (context, error, stackTrace) => Image.asset(
+            'assets/icons/placeholder.png',
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+          ),
         ),
       );
     }
