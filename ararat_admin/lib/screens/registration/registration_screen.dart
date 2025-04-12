@@ -97,16 +97,24 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 80),
-                  const Text(
-                    'ЛОГО ARARAT',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      package: null,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF2F3036),
-                    ),
-                    textAlign: TextAlign.center,
+                  Column(
+                    children: [
+                      Image.asset(
+                        'assets/logo/logo-ararat-final.png',
+                        height: 130,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'ADMINS',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF50321B),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 60),
                   

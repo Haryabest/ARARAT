@@ -67,6 +67,7 @@ flutter:
     - assets/icons/plus.png
     - assets/icons/search.png
     - assets/icons/placeholder.png
+    - assets/logo/logo-ararat-final.png
 
   fonts:
     - family: Inter
