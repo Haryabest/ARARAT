@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ararat/screens/main/tabs/home_tab.dart';
 import 'package:ararat/screens/main/main_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class FavoritesTab extends StatefulWidget {
   const FavoritesTab({super.key});
@@ -143,19 +144,33 @@ class _FavoritesTabState extends State<FavoritesTab> {
                       child: SizedBox(
                         width: 80,
                         height: 80,
-                        child: Image.asset(
-                          item['imageUrl'],
-                          fit: BoxFit.cover,
-                          width: 80,
-                          height: 80,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: Colors.white,
-                            child: const Icon(
-                              Icons.image_not_supported,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
+                        child: item['imageUrl'] != null && item['imageUrl'].toString().startsWith('http')
+                            ? CachedNetworkImage(
+                                imageUrl: item['imageUrl'],
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: Colors.grey[300],
+                                  child: const Center(
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFF4B260A),
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  color: Colors.white,
+                                  child: const Icon(
+                                    Icons.image_not_supported,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              )
+                            : Image.asset(
+                                'assets/icons/placeholder.png',
+                                fit: BoxFit.cover,
+                                width: 80,
+                                height: 80,
+                              ),
                       ),
                     ),
                     const SizedBox(width: 12),
