@@ -6,7 +6,6 @@ import 'package:ararat/screens/main/tabs/other_profile_tabs/orders_tab.dart';
 import 'package:ararat/utils/font_loader.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'package:ararat/screens/product/add_product_screen.dart';
 import 'package:ararat/screens/product/product_list_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -151,7 +150,6 @@ class MyApp extends StatelessWidget {
         '/registration': (context) => const RegistrationScreen(),
         '/main': (context) => const MainScreen(),
         '/profile/orders': (context) => const OrdersTab(),
-        '/add_product': (context) => const AddProductScreen(),
         '/product_list': (context) => const ProductListScreen(),
       },
       debugShowCheckedModeBanner: false,

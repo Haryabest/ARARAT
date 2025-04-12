@@ -103,12 +103,6 @@ class _ProductListScreenState extends State<ProductListScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushNamed(context, '/add_product');
-        },
-        child: const Icon(Icons.add),
-      ),
     );
   }
 

@@ -4,6 +4,8 @@ import 'package:ararat/models/product.dart';
 class ProductService {
   final CollectionReference _productsCollection =
       FirebaseFirestore.instance.collection('products');
+  final CollectionReference _categoriesCollection =
+      FirebaseFirestore.instance.collection('categories');
 
   // Получить все продукты
   Stream<List<Product>> getProducts({String? category}) {
@@ -21,12 +23,25 @@ class ProductService {
     });
   }
 
+  // Получить все категории
+  Stream<List<String>> getCategories() {
+    return _categoriesCollection.snapshots().map((snapshot) {
+      List<String> categories = ['Все']; // Добавляем категорию "Все" в начало списка
+      
+      categories.addAll(snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return data['name'] as String;
+      }));
+      
+      return categories;
+    });
+  }
+
   // Добавить новый продукт
-  Future<void> addProduct(Product product, List<String> imageUrls) async {
+  Future<void> addProduct(Product product) async {
     try {
       // Создаем Map с данными продукта
       Map<String, dynamic> productData = product.toMap();
-      productData['imageUrls'] = imageUrls; // Сохраняем ссылки на изображения
       
       // Добавляем продукт в Firestore
       await _productsCollection.add(productData);

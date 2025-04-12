@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:ararat/widgets/product_detail_sheet.dart';
 import 'package:ararat/services/user_data_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ararat/services/product_service.dart';
+import 'package:ararat/models/product.dart';
 
 // Глобальный класс для хранения данных избранного (в реальном приложении это должен быть провайдер или менеджер состояния)
 class FavoritesManager {
@@ -233,8 +235,8 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
-  String _selectedCategory = 'Консервация';
-  bool _isLoading = false;
+  String _selectedCategory = '';
+  bool _isLoading = true;
   String _sortType = 'По алфавиту';
   bool _isSearchExpanded = false;
   late AnimationController _searchAnimController;
@@ -266,10 +268,22 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   
   // Контроллер для анимации добавления в корзину
   late AnimationController _cartAnimController;
+
+  // Сервис для работы с продуктами
+  final _productService = ProductService();
+  
+  // Списки продуктов и категорий
+  List<Product> _products = [];
+  List<String> _categories = [];
+  List<Product> _filteredProducts = [];
   
   @override
   void initState() {
     super.initState();
+    
+    // Загружаем категории и продукты
+    _loadCategories();
+    _loadProducts();
     
     // Инициализируем контроллер скролла
     _scrollController = ScrollController();
@@ -313,6 +327,57 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
+  }
+  
+  void _loadCategories() {
+    _productService.getCategories().listen((categoriesList) {
+      if (mounted) {
+        setState(() {
+          _categories = categoriesList;
+          if (_categories.isNotEmpty && _selectedCategory.isEmpty) {
+            _selectedCategory = _categories[0];
+            _filterProductsByCategory();
+          }
+        });
+      }
+    });
+  }
+
+  void _loadProducts() {
+    setState(() {
+      _isLoading = true;
+    });
+
+    _productService.getProducts().listen((productsList) {
+      if (mounted) {
+        setState(() {
+          _products = productsList;
+          _filterProductsByCategory();
+          _isLoading = false;
+        });
+      }
+    });
+  }
+
+  void _filterProductsByCategory() {
+    if (_selectedCategory.isEmpty || _selectedCategory == 'Все') {
+      _filteredProducts = List.from(_products);
+    } else {
+      _filteredProducts = _products
+          .where((product) => product.category == _selectedCategory)
+          .toList();
+    }
+
+    // Сортируем продукты
+    _sortProducts();
+  }
+
+  void _sortProducts() {
+    if (_sortType == 'По цене') {
+      _filteredProducts.sort((a, b) => a.price.compareTo(b.price));
+    } else if (_sortType == 'По алфавиту') {
+      _filteredProducts.sort((a, b) => a.name.compareTo(b.name));
+    }
   }
   
   // Слушатель скролла для анимации кнопки поиска и обновления
@@ -384,223 +449,6 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     });
   }
   
-  // Список тестовых товаров для каждой категории
-  final Map<String, List<Map<String, dynamic>>> _productsByCategory = {
-    'Консервация': [
-      {
-        'name': 'Купюта маринованная "Фрутика"',
-        'price': 400,
-        'weight': '720 г',
-      },
-      {
-        'name': 'Баклажаны печеные "Делюкс"',
-        'price': 350,
-        'weight': '680 г',
-      },
-      {
-        'name': 'Томаты маринованные "Арарат"',
-        'price': 320,
-        'weight': '720 г',
-      },
-      {
-        'name': 'Огурцы консервированные "Эребуни"',
-        'price': 280,
-        'weight': '720 г',
-      },
-      {
-        'name': 'Перец маринованный острый',
-        'price': 420,
-        'weight': '720 г',
-      },
-      {
-        'name': 'Аджика домашняя "Армения"',
-        'price': 380,
-        'weight': '320 г',
-      },
-            {
-        'name': 'Аджика домашняя "Армения"',
-        'price': 380,
-        'weight': '320 г',
-      },
-            {
-        'name': 'Аджика домашняя "Армения"',
-        'price': 380,
-        'weight': '320 г',
-      },
-            {
-        'name': 'Аджика домашняя "Армения"',
-        'price': 380,
-        'weight': '320 г',
-      },
-            {
-        'name': 'Аджика домашняя "Армения"',
-        'price': 380,
-        'weight': '320 г',
-      },
-            {
-        'name': 'Аджика домашняя "Армения"',
-        'price': 380,
-        'weight': '320 г',
-      },
-            {
-        'name': 'Аджика домашняя "Армения"',
-        'price': 380,
-        'weight': '320 г',
-      },
-      
-    ],
-    'Соки': [
-      {
-        'name': 'Сок граната "Армения"',
-        'price': 280,
-        'weight': '1 л',
-      },
-      {
-        'name': 'Сок абрикоса натуральный',
-        'price': 250,
-        'weight': '1 л',
-      },
-      {
-        'name': 'Компот из айвы "Арарат"',
-        'price': 230,
-        'weight': '1 л',
-      },
-    ],
-    'Бастурма': [
-      {
-        'name': 'Бастурма говяжья "Арарат"',
-        'price': 950,
-        'weight': '300 г',
-      },
-      {
-        'name': 'Бастурма говяжья острая',
-        'price': 980,
-        'weight': '300 г',
-      },
-    ],
-  };
-  
-  void _showSortingModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFFA99378),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Сортировка',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  _sortOption(
-                    'По цене', 
-                    _sortType == 'По цене',
-                    () {
-                      setModalState(() {
-                        _sortType = 'По цене';
-                      });
-                    }
-                  ),
-                  
-                  _sortOption(
-                    'По алфавиту', 
-                    _sortType == 'По алфавиту',
-                    () {
-                      setModalState(() {
-                        _sortType = 'По алфавиту';
-                      });
-                    }
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          // Сохраняем выбранный тип сортировки
-                          _sortType = _sortType;
-                        });
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4B260A),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: const Text(
-                        'Применить',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }
-        );
-      },
-    );
-  }
-  
-  Widget _sortOption(String title, bool isSelected, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
-              ),
-            ),
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isSelected ? Colors.white : const Color(0xFF524F4F),
-              ),
-              child: isSelected 
-                ? const Icon(Icons.check, size: 16, color: Color(0xFF6C4425))
-                : null,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-  
   void _selectCategory(String category) {
     if (_selectedCategory != category) {
       setState(() {
@@ -608,8 +456,11 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
         _isLoading = true;
       });
       
+      // Фильтрация товаров по категории
+      _filterProductsByCategory();
+      
       // Имитация загрузки
-      Future.delayed(const Duration(milliseconds: 800), () {
+      Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -621,16 +472,6 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    // Получаем товары для выбранной категории или пустой список
-    final products = _productsByCategory[_selectedCategory] ?? [];
-    
-    // Сортируем товары, если необходимо
-    if (_sortType == 'По цене') {
-      products.sort((a, b) => a['price'].compareTo(b['price']));
-    } else if (_sortType == 'По алфавиту') {
-      products.sort((a, b) => a['name'].compareTo(b['name']));
-    }
-    
     return SafeArea(
       child: Scaffold(
         backgroundColor: const Color(0xFFA99378),
@@ -689,22 +530,6 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                   
                   const SizedBox(height: 16),
                   
-                  // Промо-акции, горизонтальный скролл
-                  SizedBox(
-                    height: 120,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      itemCount: 8, // Количество промо-блоков
-                      itemBuilder: (context, index) {
-                        return _buildPromoBlock(index);
-                      },
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  
                   // Категории с сортировкой
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -723,35 +548,9 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                   child: SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
                                     child: Row(
-                                      children: [
-                                        _categoryItem('Консервация', _selectedCategory == 'Консервация'),
-                                        _categoryItem('Соки', _selectedCategory == 'Соки'),
-                                        _categoryItem('Бастурма', _selectedCategory == 'Бастурма'),
-                                        _categoryItem('Суджух', _selectedCategory == 'Суджух'),
-                                        _categoryItem('Колбаса', _selectedCategory == 'Колбаса'),
-                                        _categoryItem('Замороженные продукты', _selectedCategory == 'Замороженные продукты'),
-                                        _categoryItem('Рыба', _selectedCategory == 'Рыба'),
-                                        _categoryItem('Соусы', _selectedCategory == 'Соусы'),
-                                        _categoryItem('Молочная продукция', _selectedCategory == 'Молочная продукция'),
-                                        _categoryItem('Макаронные изделия', _selectedCategory == 'Макаронные изделия'),
-                                        _categoryItem('Хаш', _selectedCategory == 'Хаш'),
-                                        _categoryItem('Оливки/маслины', _selectedCategory == 'Оливки/маслины'),
-                                        _categoryItem('Мед', _selectedCategory == 'Мед'),
-                                        _categoryItem('Конфеты', _selectedCategory == 'Конфеты'),
-                                        _categoryItem('Специи и приправы', _selectedCategory == 'Специи и приправы'),
-                                        _categoryItem('Компот', _selectedCategory == 'Компот'),
-                                        _categoryItem('Лимонады', _selectedCategory == 'Лимонады'),
-                                        _categoryItem('Крупы', _selectedCategory == 'Крупы'),
-                                        _categoryItem('Варенье и джемы', _selectedCategory == 'Варенье и джемы'),
-                                        _categoryItem('Сыры', _selectedCategory == 'Сыры'),
-                                        _categoryItem('Армянские сухофрукты', _selectedCategory == 'Армянские сухофрукты'),
-                                        _categoryItem('Кофе', _selectedCategory == 'Кофе'),
-                                        _categoryItem('Чай', _selectedCategory == 'Чай'),
-                                        _categoryItem('Лаваш и хлеб', _selectedCategory == 'Лаваш и хлеб'),
-                                        _categoryItem('Сувениры из армении', _selectedCategory == 'Сувениры из армении'),
-                                        _categoryItem('Посуда', _selectedCategory == 'Посуда'),
-                                        _categoryItem('Подарки', _selectedCategory == 'Подарки'),
-                                      ],
+                                      children: _categories.map((category) => 
+                                        _categoryItem(category, _selectedCategory == category)
+                                      ).toList(),
                                     ),
                                   ),
                                 ),
@@ -786,7 +585,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                   // Индикатор загрузки или список товаров
                   _isLoading 
                     ? _buildSkeletonLoading()
-                    : products.isEmpty
+                    : _filteredProducts.isEmpty
                       ? const Center(
                           child: Padding(
                             padding: EdgeInsets.all(32.0),
@@ -812,13 +611,14 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                               crossAxisSpacing: 12,
                               mainAxisSpacing: 12,
                             ),
-                            itemCount: products.length,
+                            itemCount: _filteredProducts.length,
                             itemBuilder: (context, index) {
-                              final product = products[index];
+                              final product = _filteredProducts[index];
                               return _productCard(
-                                product['name'],
-                                product['price'],
-                                product['weight'],
+                                product.name,
+                                product.price.toInt(),
+                                product.weight,
+                                product.imageUrls.isNotEmpty ? product.imageUrls[0] : null,
                               );
                             },
                           ),
@@ -892,7 +692,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     );
   }
   
-  Widget _productCard(String name, int price, String weight) {
+  Widget _productCard(String name, int price, String weight, String? imageUrl) {
     // Проверяем, находится ли товар в избранном и корзине
     final bool isFavorite = _favoritesManager.isFavorite(name);
     _cartManager.isInCart(name);
@@ -904,7 +704,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           'name': name,
           'price': price,
           'weight': weight,
-          'imageUrl': 'assets/icons/placeholder.png',
+          'imageUrl': imageUrl ?? 'assets/icons/placeholder.png',
         };
         
         showProductDetailSheet(context, product).then((result) {
@@ -932,21 +732,39 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
-                        image: DecorationImage(
-                          image: const AssetImage('assets/icons/placeholder.png'),
-                          fit: BoxFit.cover,
-                          onError: (exception, stackTrace) => {},
-                        ),
                       ),
-                      child: Center(
-                        child: Text(
-                          weight,
-                          style: const TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 12,
-                            color: Colors.transparent,
-                          ),
-                        ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: imageUrl != null && imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Image.asset(
+                                    'assets/icons/placeholder.png',
+                                    fit: BoxFit.cover,
+                                  );
+                                },
+                                loadingBuilder: (context, child, loadingProgress) {
+                                  if (loadingProgress == null) return child;
+                                  return Center(
+                                    child: CircularProgressIndicator(
+                                      value: loadingProgress.expectedTotalBytes != null
+                                          ? loadingProgress.cumulativeBytesLoaded / 
+                                            loadingProgress.expectedTotalBytes!
+                                          : null,
+                                    ),
+                                  );
+                                },
+                              )
+                            : Image.asset(
+                                'assets/icons/placeholder.png',
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                              ),
                       ),
                     ),
                   ),
@@ -1011,7 +829,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                   'name': name,
                                   'price': price,
                                   'weight': weight,
-                                  'imageUrl': 'assets/icons/placeholder.png',
+                                  'imageUrl': imageUrl ?? 'assets/icons/placeholder.png',
                                 };
                                 _cartManager.addToCart(product);
                               },
@@ -1072,7 +890,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                         'name': name,
                         'price': price,
                         'weight': weight,
-                        'imageUrl': 'assets/icons/placeholder.png',
+                        'imageUrl': imageUrl ?? 'assets/icons/placeholder.png',
                       };
                       _favoritesManager.addToFavorites(product);
                     }
@@ -1542,107 +1360,215 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     );
   }
   
-  // Метод для построения промо-блоков
-  Widget _buildPromoBlock(int index) {
-    // Разные цвета для разных блоков
-    final List<Color> colors = [
-      const Color(0xFF6C4425),
-      const Color(0xFF8D6E63),
-      const Color(0xFFA1887F),
-      const Color(0xFF4E342E),
-      const Color(0xFF3E2723),
-      const Color(0xFF5D4037),
-      const Color(0xFF7B5E57),
-      const Color(0xFF9C786C),
-    ];
-    
-    // Разные заголовки акций
-    final List<String> titles = [
-      'Скидка 20%',
-      'Акция 1+1',
-      'Новинка',
-      'Специальное предложение',
-      'Бесплатная доставка',
-      'Распродажа',
-      'Подарок',
-      'Только сегодня',
-    ];
-    
-    return Container(
-      width: 248,
-      height: 68,
-      margin: const EdgeInsets.only(right: 12),
-      decoration: BoxDecoration(
-        color: colors[index % colors.length],
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+  void _showSortingModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFFA99378),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        mainAxisSize: MainAxisSize.max,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        textDirection: TextDirection.ltr,
-        verticalDirection: VerticalDirection.down,
-        children: [
-          // Основное содержимое
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Заголовок акции
-                  Text(
-                    titles[index % titles.length],
-                    style: const TextStyle(
+                  const Text(
+                    'Сортировка',
+                    style: TextStyle(
                       fontFamily: 'Inter',
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 20),
                   
-                  // Описание акции
-                  Text(
-                    'На выбранные товары из категории "${_productsByCategory.keys.elementAt(index % _productsByCategory.length)}"',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 10,
-                      color: Colors.white,
+                  _sortOption(
+                    'По цене', 
+                    _sortType == 'По цене',
+                    () {
+                      setModalState(() {
+                        _sortType = 'По цене';
+                      });
+                    }
+                  ),
+                  
+                  _sortOption(
+                    'По алфавиту', 
+                    _sortType == 'По алфавиту',
+                    () {
+                      setModalState(() {
+                        _sortType = 'По алфавиту';
+                      });
+                    }
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          // Сохраняем выбранный тип сортировки
+                          _sortProducts();
+                        });
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4B260A),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: const Text(
+                        'Применить',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
+            );
+          }
+        );
+      },
+    );
+  }
+  
+  Widget _sortOption(String title, bool isSelected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
+            ),
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? Colors.white : const Color(0xFF524F4F),
+              ),
+              child: isSelected 
+                ? const Icon(Icons.check, size: 16, color: Color(0xFF6C4425))
+                : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPromoBlock(int index) {
+    if (_categories.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    final int categoryIndex = index % _categories.length;
+    final String category = _categories[categoryIndex];
+    
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      width: 300,
+      decoration: BoxDecoration(
+        color: const Color(0xFF6C4425),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Иконка скидки
+          Container(
+            width: 48,
+            height: 48,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Color(0xFF50321B),
+            ),
+            child: const Center(
+              child: Text(
+                '20%',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
             ),
           ),
+          const SizedBox(width: 12),
           
-          // Полоса предупреждения (черно-желтые полосы)
-          Container(
-            height: 12,
-            decoration: const BoxDecoration(
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-              child: CustomPaint(
-                size: const Size(double.infinity, 12),
-                painter: StripePainter(),
-              ),
+          // Информация о скидке
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Скидка недели',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                
+                // Описание акции
+                Text(
+                  'На выбранные товары из категории "$category"',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    fontWeight: FontWeight.normal,
+                    color: Color(0xFFD5D5D5),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                
+                // Кнопка "Подробнее"
+                GestureDetector(
+                  onTap: () {
+                    // Можно добавить переход на экран с акциями
+                  },
+                  child: const Text(
+                    'Подробнее',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
