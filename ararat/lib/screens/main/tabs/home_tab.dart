@@ -4,6 +4,7 @@ import 'package:ararat/services/user_data_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ararat/services/product_service.dart';
 import 'package:ararat/models/product.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 // Глобальный класс для хранения данных избранного (в реальном приложении это должен быть провайдер или менеджер состояния)
 class FavoritesManager {
@@ -735,29 +736,27 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
-                        child: imageUrl != null && imageUrl.isNotEmpty
-                            ? Image.network(
-                                imageUrl,
+                        child: GestureDetector(
+                          onTap: () {
+                            // Показываем полноразмерное изображение
+                            _showFullImage(context, imageUrl ?? 'assets/icons/placeholder.png', name);
+                          },
+                          child: imageUrl != null && imageUrl.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: imageUrl,
                                 fit: BoxFit.cover,
                                 width: double.infinity,
                                 height: double.infinity,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Image.asset(
-                                    'assets/icons/placeholder.png',
-                                    fit: BoxFit.cover,
-                                  );
-                                },
-                                loadingBuilder: (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Center(
-                                    child: CircularProgressIndicator(
-                                      value: loadingProgress.expectedTotalBytes != null
-                                          ? loadingProgress.cumulativeBytesLoaded / 
-                                            loadingProgress.expectedTotalBytes!
-                                          : null,
-                                    ),
-                                  );
-                                },
+                                placeholder: (context, url) => const Center(
+                                  child: CircularProgressIndicator(
+                                    color: Color(0xFF50321B),
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Image.asset(
+                                  'assets/icons/placeholder.png',
+                                  fit: BoxFit.cover,
+                                ),
                               )
                             : Image.asset(
                                 'assets/icons/placeholder.png',
@@ -765,6 +764,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                 width: double.infinity,
                                 height: double.infinity,
                               ),
+                        ),
                       ),
                     ),
                   ),
@@ -1572,6 +1572,99 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Добавить метод для отображения полноразмерного изображения
+  void _showFullImage(BuildContext context, String imageUrl, String productName) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Полупрозрачный фон
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(color: Colors.black87),
+            ),
+            
+            // Изображение
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Название товара вверху
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    productName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                
+                // Изображение с Hero анимацией
+                Expanded(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 3.0,
+                    child: imageUrl.startsWith('assets/')
+                      ? Image.asset(
+                          imageUrl,
+                          fit: BoxFit.contain,
+                        )
+                      : CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.contain,
+                          placeholder: (context, url) => const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: Colors.white,
+                                  size: 48,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Не удалось загрузить изображение',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                  ),
+                ),
+                
+                // Кнопка закрытия внизу
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF50321B),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Закрыть', style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

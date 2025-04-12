@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ararat/screens/main/main_screen.dart';
 import 'package:ararat/services/order_service.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class HistoryTab extends StatefulWidget {
   const HistoryTab({super.key});
@@ -482,10 +483,20 @@ class _HistoryTabState extends State<HistoryTab> {
             ),
             clipBehavior: Clip.hardEdge,
             child: imageUrl != null && imageUrl.isNotEmpty
-                ? Image.network(
-                    imageUrl,
+                ? CachedNetworkImage(
+                    imageUrl: imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
+                    placeholder: (context, url) => const Center(
+                      child: SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF50321B),
+                        ),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) {
                       print('Ошибка загрузки изображения: $error');
                       return Icon(
                         Icons.image_not_supported_outlined,
@@ -683,10 +694,20 @@ class _HistoryTabState extends State<HistoryTab> {
                         ),
                         clipBehavior: Clip.hardEdge,
                         child: imageUrl != null && imageUrl.isNotEmpty
-                          ? Image.network(
-                              imageUrl,
+                          ? CachedNetworkImage(
+                              imageUrl: imageUrl,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
+                              placeholder: (context, url) => const Center(
+                                child: SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF50321B),
+                                  ),
+                                ),
+                              ),
+                              errorWidget: (context, url, error) {
                                 print('Ошибка загрузки изображения в деталях: $error');
                                 return Icon(
                                   Icons.image_not_supported_outlined,

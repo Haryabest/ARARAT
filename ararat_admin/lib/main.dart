@@ -3,6 +3,7 @@ import 'package:ararat/screens/registration/registration_screen.dart';
 import 'package:ararat/screens/login/login_screen.dart';
 import 'package:ararat/screens/main_screen.dart';
 import 'package:ararat/utils/font_loader.dart';
+import 'package:ararat/services/image_cache_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:ararat/screens/product/add_product_screen.dart';
@@ -108,6 +109,17 @@ class MyAppLoader extends StatelessWidget {
       // Загружаем шрифты
       await FontLoader.loadFonts();
       print('Шрифты загружены');
+      
+      // Инициализируем кэш для изображений
+      print('Инициализация кэша изображений...');
+      try {
+        // Запускаем инициализацию в фоне, чтобы не блокировать запуск приложения
+        ImageCacheService().initialize().then((_) {
+          print('Кэш изображений инициализирован');
+        });
+      } catch (e) {
+        print('Ошибка при инициализации кэша изображений: $e');
+      }
     } catch (e) {
       print('Ошибка инициализации приложения: $e');
       // Продолжаем выполнение даже при ошибке Firebase

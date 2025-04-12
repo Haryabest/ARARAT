@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:ararat/models/product.dart';
 import 'package:ararat/services/product_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProductListScreen extends StatefulWidget {
   const ProductListScreen({super.key});
@@ -115,33 +116,23 @@ class _ProductListScreenState extends State<ProductListScreen> {
           // Изображение товара
           Expanded(
             child: product.imageUrls.isNotEmpty
-                ? Image.network(
-                    product.imageUrls[0],
+                ? CachedNetworkImage(
+                    imageUrl: product.imageUrls[0],
                     fit: BoxFit.cover,
                     width: double.infinity,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                              : null,
+                    placeholder: (context, url) => const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      color: Colors.grey[300],
+                      child: const Center(
+                        child: Icon(
+                          Icons.error_outline,
+                          size: 50,
+                          color: Colors.red,
                         ),
-                      );
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey[300],
-                        child: const Center(
-                          child: Icon(
-                            Icons.error_outline,
-                            size: 50,
-                            color: Colors.red,
-                          ),
-                        ),
-                      );
-                    },
+                      ),
+                    ),
                   )
                 : Container(
                     color: Colors.grey[300],

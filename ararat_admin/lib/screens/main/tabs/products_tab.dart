@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ararat/constants/colors.dart';
 import 'dart:math' as math;
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProductsTab extends StatefulWidget {
   const ProductsTab({super.key});
@@ -553,18 +554,19 @@ class _ProductsTabState extends State<ProductsTab> {
                                           _showImageUrlDialog(context);
                                         },
                                         child: _imageUrlController.text.isNotEmpty
-                                          ? Image.network(
-                                              _imageUrlController.text,
+                                          ? CachedNetworkImage(
+                                              imageUrl: _imageUrlController.text,
                                               fit: BoxFit.cover,
-                                              errorBuilder: (context, error, stackTrace) {
-                                                return const Center(
-                                                  child: Icon(
-                                                    Icons.add_photo_alternate,
-                                                    color: Colors.white,
-                                                    size: 60,
-                                                  ),
-                                                );
-                                              },
+                                              placeholder: (context, url) => const Center(
+                                                child: CircularProgressIndicator(),
+                                              ),
+                                              errorWidget: (context, url, error) => const Center(
+                                                child: Icon(
+                                                  Icons.add_photo_alternate,
+                                                  color: Colors.white,
+                                                  size: 60,
+                                                ),
+                                              ),
                                             )
                                           : const Center(
                                               child: Column(
@@ -1014,7 +1016,9 @@ class _ProductsTabState extends State<ProductsTab> {
     _discountController.clear();
     _weightController.clear();
     _quantityController.clear();
-    _selectedCategory = null;
+    setState(() {
+      _selectedCategory = null;
+    });
     
     // Показываем индикатор загрузки
     if (mounted) {
@@ -1041,53 +1045,54 @@ class _ProductsTabState extends State<ProductsTab> {
       'inStock': false, // Изначально не в наличии
     };
     
-    // Используем Future без дополнительных задержек
-    Future<void> addProductToFirestore() async {
+    // Используем Future.microtask для запуска операции в следующем цикле событий
+    Future.microtask(() async {
       try {
         // Добавляем продукт в Firestore
         await _firestore.collection('products').add(productData)
             .timeout(const Duration(seconds: 15));
         
-        // Обновляем список товаров
-        if (mounted) {
-          await _loadProducts();
-          
-          // Дополнительно вызываем setState для обновления UI
-          setState(() {});
-          
-          // Показываем сообщение об успешном добавлении
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Товар успешно добавлен'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
+        // Обновляем список товаров в отдельной микрозадаче
+        if (!mounted) return;
+        
+        // Загружаем продукты
+        await _loadProducts();
+        
+        if (!mounted) return;
+        
+        // Обновляем интерфейс
+        setState(() {});
+        
+        // Показываем сообщение об успешном добавлении
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Товар успешно добавлен'),
+            backgroundColor: Colors.green,
+          ),
+        );
       } on TimeoutException catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Превышено время ожидания при добавлении товара. Проверьте соединение с интернетом.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        if (!mounted) return;
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Превышено время ожидания при добавлении товара. Проверьте соединение с интернетом.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       } catch (error) {
-        // Показываем сообщение об ошибке
+        // Логируем ошибку
         print('Ошибка при добавлении товара: $error');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Ошибка при добавлении товара: ${error.toString()}'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        
+        if (!mounted) return;
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при добавлении товара: ${error.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
-    }
-    
-    // Запускаем асинхронную операцию
-    addProductToFirestore();
+    });
   }
   
   // Метод для отображения диалога выбора категории
@@ -1418,87 +1423,52 @@ class _ProductsTabState extends State<ProductsTab> {
   void _showFullImage(BuildContext context, String imageUrl, String productName) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Полупрозрачный фон
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(color: Colors.black87),
-            ),
-            
-            // Изображение
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Название товара вверху
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    productName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  productName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
                   ),
                 ),
-                
-                // Изображение с Hero анимацией
-                Expanded(
-                  child: Hero(
-                    tag: 'product_image_$imageUrl',
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 3.0,
-                      child: Image.network(
-                        imageUrl,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  color: Colors.white,
-                                  size: 48,
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'Не удалось загрузить изображение',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+              ),
+              InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 4.0,
+                child: Hero(
+                  tag: 'product_image_$imageUrl',
+                  child: CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    placeholder: (context, url) => const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                    errorWidget: (context, url, error) => const Center(
+                      child: Icon(Icons.error, color: Colors.white, size: 50),
                     ),
                   ),
                 ),
-                
-                // Кнопка закрытия внизу
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Закрыть', style: TextStyle(color: Colors.white)),
-                  ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
                 ),
-              ],
-            ),
-          ],
-        ),
-      ),
+                child: const Text('Закрыть'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1598,18 +1568,19 @@ class _ProductsTabState extends State<ProductsTab> {
                                           _showImageUrlDialog(context);
                                         },
                                         child: _imageUrlController.text.isNotEmpty
-                                          ? Image.network(
-                                              _imageUrlController.text,
+                                          ? CachedNetworkImage(
+                                              imageUrl: _imageUrlController.text,
                                               fit: BoxFit.cover,
-                                              errorBuilder: (context, error, stackTrace) {
-                                                return const Center(
-                                                  child: Icon(
-                                                    Icons.add_photo_alternate,
-                                                    color: Colors.white,
-                                                    size: 60,
-                                                  ),
-                                                );
-                                              },
+                                              placeholder: (context, url) => const Center(
+                                                child: CircularProgressIndicator(),
+                                              ),
+                                              errorWidget: (context, url, error) => const Center(
+                                                child: Icon(
+                                                  Icons.add_photo_alternate,
+                                                  color: Colors.white,
+                                                  size: 60,
+                                                ),
+                                              ),
                                             )
                                           : const Center(
                                               child: Column(
@@ -2274,18 +2245,19 @@ class _ProductsTabState extends State<ProductsTab> {
                                         width: double.infinity,
                                         color: Colors.grey[200],
                                         child: imageUrl.isNotEmpty
-                                            ? Image.network(
-                                                imageUrl,
+                                            ? CachedNetworkImage(
+                                                imageUrl: imageUrl,
                                                 fit: BoxFit.cover,
-                                                errorBuilder: (context, error, stackTrace) {
-                                                  return const Center(
-                                                    child: Icon(
-                                                      Icons.image_not_supported_outlined,
-                                                      color: Colors.grey,
-                                                      size: 40,
-                                                    ),
-                                                  );
-                                                },
+                                                placeholder: (context, url) => const Center(
+                                                  child: CircularProgressIndicator(),
+                                                ),
+                                                errorWidget: (context, url, error) => const Center(
+                                                  child: Icon(
+                                                    Icons.image_not_supported_outlined,
+                                                    color: Colors.grey,
+                                                    size: 40,
+                                                  ),
+                                                ),
                                               )
                                             : const Center(
                                                 child: Icon(
