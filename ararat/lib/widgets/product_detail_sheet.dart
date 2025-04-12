@@ -43,7 +43,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
       end: _expandedSheetHeight,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeInOut,
+      curve: Curves.easeOutCubic,
     ));
   }
   

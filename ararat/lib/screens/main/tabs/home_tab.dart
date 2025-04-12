@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ararat/services/product_service.dart';
 import 'package:ararat/models/product.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:ararat/services/search_service.dart';
 
 // Глобальный класс для хранения данных избранного (в реальном приложении это должен быть провайдер или менеджер состояния)
 class FavoritesManager {
@@ -273,18 +274,28 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   // Сервис для работы с продуктами
   final _productService = ProductService();
   
+  // Сервис для работы с поисковыми запросами
+  final _searchService = SearchService();
+  
   // Списки продуктов и категорий
   List<Product> _products = [];
   List<String> _categories = [];
+  List<String> _filteredCategories = [];
   List<Product> _filteredProducts = [];
+  
+  // Список популярных запросов
+  List<String> _popularQueries = [];
+  bool _isLoadingQueries = false;
   
   @override
   void initState() {
     super.initState();
     
     // Загружаем категории и продукты
-    _loadCategories();
     _loadProducts();
+    
+    // Загружаем популярные запросы
+    _loadPopularQueries();
     
     // Инициализируем контроллер скролла
     _scrollController = ScrollController();
@@ -298,6 +309,9 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
       parent: _searchAnimController,
       curve: Curves.easeInOut,
     );
+    
+    // Добавляем слушатель изменений текста поиска
+    _searchController.addListener(_onSearchChanged);
     
     // Инициализация анимации обновления
     _refreshAnimController = AnimationController(
@@ -335,10 +349,8 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _categories = categoriesList;
-          if (_categories.isNotEmpty && _selectedCategory.isEmpty) {
-            _selectedCategory = _categories[0];
-            _filterProductsByCategory();
-          }
+          // Фильтруем категории, оставляя только те, в которых есть товары
+          _filterCategories();
         });
       }
     });
@@ -353,11 +365,31 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
       if (mounted) {
         setState(() {
           _products = productsList;
-          _filterProductsByCategory();
+          // После загрузки продуктов загружаем категории
+          _loadCategories();
           _isLoading = false;
         });
       }
     });
+  }
+
+  void _filterCategories() {
+    // Фильтруем категории, оставляя только те, в которых есть товары
+    _filteredCategories = _categories.where((category) {
+      // Проверяем, есть ли товары в данной категории
+      return _products.any((product) => product.category == category);
+    }).toList();
+    
+    // Добавляем категорию "Все" в начало списка
+    _filteredCategories.insert(0, 'Все');
+    
+    // Если категория не выбрана, выбираем "Все" по умолчанию
+    if (_selectedCategory.isEmpty || !_filteredCategories.contains(_selectedCategory)) {
+      _selectedCategory = 'Все';
+    }
+    
+    // Фильтруем продукты в соответствии с выбранной категорией
+    _filterProductsByCategory();
   }
 
   void _filterProductsByCategory() {
@@ -420,9 +452,56 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     });
   }
   
+  void _onSearchChanged() {
+    if (_searchController.text.isEmpty) {
+      // Если поисковая строка пуста, возвращаем фильтрацию только по категории
+      setState(() {
+        _filterProductsByCategory();
+      });
+    } else {
+      // Иначе фильтруем по запросу и категории
+      setState(() {
+        _searchProducts(_searchController.text, saveQuery: false);
+      });
+    }
+  }
+  
+  void _searchProducts(String query, {bool saveQuery = false}) {
+    // Приводим запрос к нижнему регистру для сравнения без учета регистра
+    final String normalizedQuery = query.toLowerCase();
+    
+    // Если запрос не пустой и нужно сохранить его, сохраняем в базе данных
+    if (saveQuery && query.trim().isNotEmpty) {
+      _searchService.saveQuery(query.trim())
+        .then((_) => _loadPopularQueries());
+    }
+    
+    // Если выбрана категория "Все" или категория не выбрана, ищем по всем продуктам
+    if (_selectedCategory.isEmpty || _selectedCategory == 'Все') {
+      _filteredProducts = _products.where((product) {
+        return product.name.toLowerCase().contains(normalizedQuery) || 
+               (product.description?.toLowerCase().contains(normalizedQuery) ?? false) ||
+               (product.ingredients?.toLowerCase().contains(normalizedQuery) ?? false) ||
+               product.category.toLowerCase().contains(normalizedQuery);
+      }).toList();
+    } else {
+      // Иначе ищем только среди товаров выбранной категории
+      _filteredProducts = _products.where((product) {
+        return product.category == _selectedCategory && 
+              (product.name.toLowerCase().contains(normalizedQuery) ||
+               (product.description?.toLowerCase().contains(normalizedQuery) ?? false) ||
+               (product.ingredients?.toLowerCase().contains(normalizedQuery) ?? false));
+      }).toList();
+    }
+    
+    // Сортируем результаты поиска
+    _sortProducts();
+  }
+  
   @override
   void dispose() {
     _searchAnimController.dispose();
+    _searchController.removeListener(_onSearchChanged); // Удаляем слушатель
     _searchController.dispose();
     _searchFocusNode.dispose();
     _shimmerController.dispose();
@@ -538,18 +617,19 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                       children: [
                         Expanded(
                           child: Container(
-                            height: 40,
+                            height: 44,
                             decoration: BoxDecoration(
                               color: const Color(0xFF6C4425),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
                               children: [
                                 Expanded(
                                   child: SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
                                     child: Row(
-                                      children: _categories.map((category) => 
+                                      children: _filteredCategories.map((category) => 
                                         _categoryItem(category, _selectedCategory == category)
                                       ).toList(),
                                     ),
@@ -622,6 +702,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                 product.imageUrls.isNotEmpty ? product.imageUrls[0] : null,
                                 description: product.description,
                                 ingredients: product.ingredients,
+                                quantity: product.quantity,
                               );
                             },
                           ),
@@ -668,34 +749,27 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   Widget _categoryItem(String title, bool isSelected) {
     return GestureDetector(
       onTap: () => _selectCategory(title),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? Colors.white : const Color(0xFFD5D5D5),
-              ),
-            ),
-            if (isSelected)
-              Container(
-                margin: const EdgeInsets.only(top: 4),
-                height: 2,
-                width: title.length * 7.0, // Примерная ширина подчеркивания под текстом
-                color: Colors.white,
-              ),
-          ],
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+        decoration: isSelected ? BoxDecoration(
+          color: const Color(0xFF50321B),
+          borderRadius: BorderRadius.circular(20),
+        ) : null,
+        child: Text(
+          title,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : const Color(0xFFD5D5D5),
+          ),
         ),
       ),
     );
   }
   
-  Widget _productCard(String name, int price, String weight, String? imageUrl, {String? description, String? ingredients}) {
+  Widget _productCard(String name, int price, String weight, String? imageUrl, {String? description, String? ingredients, int quantity = 0}) {
     // Проверяем, находится ли товар в избранном и корзине
     final bool isFavorite = _favoritesManager.isFavorite(name);
     _cartManager.isInCart(name);
@@ -710,6 +784,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           'imageUrl': imageUrl ?? 'assets/icons/placeholder.png',
           'description': description,
           'ingredients': ingredients,
+          'quantity': quantity,
         };
         
         showProductDetailSheet(context, product).then((result) {
@@ -745,29 +820,64 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                             // Показываем полноразмерное изображение
                             _showFullImage(context, imageUrl ?? 'assets/icons/placeholder.png', name);
                           },
-                          child: imageUrl != null && imageUrl.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: imageUrl,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                placeholder: (context, url) => const Center(
-                                  child: CircularProgressIndicator(
-                                    color: Color(0xFF50321B),
-                                    strokeWidth: 2,
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              // Изображение продукта
+                              imageUrl != null && imageUrl.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: imageUrl,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    placeholder: (context, url) => const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Color(0xFF50321B),
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                    errorWidget: (context, url, error) => Image.asset(
+                                      'assets/icons/placeholder.png',
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                                : Image.asset(
+                                    'assets/icons/placeholder.png',
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                  ),
+                              
+                              // Индикатор количества товара
+                              Positioned(
+                                right: 8,
+                                bottom: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: quantity > 0 ? const Color(0xFF6C4425) : Colors.red[700],
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.2),
+                                        blurRadius: 2,
+                                        offset: const Offset(0, 1),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    quantity > 0 ? '$quantity шт' : 'Нет в наличии',
+                                    style: const TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
-                                errorWidget: (context, url, error) => Image.asset(
-                                  'assets/icons/placeholder.png',
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : Image.asset(
-                                'assets/icons/placeholder.png',
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
                               ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -836,6 +946,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                   'imageUrl': imageUrl ?? 'assets/icons/placeholder.png',
                                   'description': description,
                                   'ingredients': ingredients,
+                                  'quantity': quantity,
                                 };
                                 _cartManager.addToCart(product);
                               },
@@ -897,6 +1008,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                         'price': price,
                         'weight': weight,
                         'imageUrl': imageUrl ?? 'assets/icons/placeholder.png',
+                        'quantity': quantity,
                       };
                       _favoritesManager.addToFavorites(product);
                     }
@@ -1082,7 +1194,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
-                    // Здесь можно добавить популярные запросы или результаты поиска
+                    // Добавляем отображение результатов поиска или популярных запросов
                     Expanded(
                       child: _searchController.text.isEmpty
                           ? Padding(
@@ -1100,25 +1212,35 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                     ),
                                   ),
                                   const SizedBox(height: 16),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      _buildSearchTag('Аджика'),
-                                      _buildSearchTag('Бастурма'),
-                                      _buildSearchTag('Гранатовый сок'),
-                                      _buildSearchTag('Лаваш'),
-                                      _buildSearchTag('Сыр'),
-                                      _buildSearchTag('Варенье'),
-                                    ],
-                                  ),
+                                  if (_isLoadingQueries)
+                                    const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Color(0xFF6C4425),
+                                      ),
+                                    )
+                                  else if (_popularQueries.isEmpty)
+                                    const Center(
+                                      child: Text(
+                                        'Нет популярных запросов',
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 14,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: _popularQueries
+                                          .map((query) => _buildSearchTag(query))
+                                          .toList(),
+                                    ),
                                 ],
                               ),
                             )
-                          : ListView.builder(
-                              itemCount: 0, // Заглушка для результатов поиска
-                              itemBuilder: (context, index) => const SizedBox(),
-                            ),
+                          : _buildSearchResults(),
                     ),
                   ],
                 ),
@@ -1133,7 +1255,12 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   Widget _buildSearchTag(String tag) {
     return GestureDetector(
       onTap: () {
-        _searchController.text = tag;
+        // Устанавливаем текст запроса и обновляем фокус
+        setState(() {
+          _searchController.text = tag;
+          // Сохраняем запрос при выборе из популярных
+          _searchProducts(tag, saveQuery: true);
+        });
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1150,6 +1277,97 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           ),
         ),
       ),
+    );
+  }
+  
+  // Метод для отображения результатов поиска
+  Widget _buildSearchResults() {
+    if (_filteredProducts.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.search_off,
+                size: 64,
+                color: Color(0xFF6C4425),
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Товары не найдены',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black54,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Попробуйте изменить запрос или категорию поиска',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 14,
+                  color: Colors.black38,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    return Column(
+      children: [
+        // Добавляем кнопку "Сохранить запрос" сверху списка результатов
+        Padding(
+          padding: const EdgeInsets.only(top: 8.0, left: 16.0, right: 16.0),
+          child: ElevatedButton(
+            onPressed: () {
+              // Сохраняем текущий запрос
+              if (_searchController.text.trim().isNotEmpty) {
+                _searchService.saveQuery(_searchController.text.trim())
+                  .then((_) => _loadPopularQueries());
+                
+                // Показываем уведомление
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Запрос сохранен'),
+                    backgroundColor: Color(0xFF6C4425),
+                    duration: Duration(seconds: 1),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6C4425),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: const Text('Сохранить этот запрос'),
+          ),
+        ),
+        // Список результатов
+        Expanded(
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+            shrinkWrap: true,
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 100),
+            itemCount: _filteredProducts.length,
+            itemBuilder: (context, index) {
+              final product = _filteredProducts[index];
+              return _buildSearchResultItem(product);
+            },
+          ),
+        ),
+      ],
     );
   }
   
@@ -1366,6 +1584,271 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     );
   }
   
+  // Метод для создания элемента результата поиска
+  Widget _buildSearchResultItem(Product product) {
+    return GestureDetector(
+      onTap: () {
+        // Закрываем поиск
+        _toggleSearch();
+        
+        // Открываем детальную информацию о товаре
+        final productData = {
+          'name': product.name,
+          'price': product.price.toInt(),
+          'weight': product.weight,
+          'imageUrl': product.imageUrls.isNotEmpty ? product.imageUrls[0] : null,
+          'description': product.description,
+          'ingredients': product.ingredients,
+          'quantity': product.quantity,
+        };
+        
+        showProductDetailSheet(context, productData).then((result) {
+          if (result != null && result['action'] == 'add_to_cart') {
+            _cartManager.addToCart(productData);
+          }
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Изображение товара
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+                color: Colors.white,
+              ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
+                child: product.imageUrls.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: product.imageUrls[0],
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF50321B),
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Image.asset(
+                          'assets/icons/placeholder.png',
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : Image.asset(
+                        'assets/icons/placeholder.png',
+                        fit: BoxFit.cover,
+                      ),
+              ),
+            ),
+            
+            // Информация о товаре
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          '${product.price.toInt()} ₽',
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6C4425),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          product.weight,
+                          style: const TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      product.category,
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Кнопка добавления в корзину
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: GestureDetector(
+                onTap: () {
+                  final productData = {
+                    'name': product.name,
+                    'price': product.price.toInt(),
+                    'weight': product.weight,
+                    'imageUrl': product.imageUrls.isNotEmpty ? product.imageUrls[0] : null,
+                    'description': product.description,
+                    'ingredients': product.ingredients,
+                    'quantity': product.quantity,
+                  };
+                  _cartManager.addToCart(productData);
+                  
+                  // Показываем уведомление о добавлении товара в корзину
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${product.name} добавлен в корзину'),
+                      backgroundColor: const Color(0xFF6C4425),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6C4425),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.add_shopping_cart,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Добавить метод для отображения полноразмерного изображения
+  void _showFullImage(BuildContext context, String imageUrl, String productName) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Полупрозрачный фон
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(color: Colors.black87),
+            ),
+            
+            // Изображение
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Название товара вверху
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    productName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                
+                // Изображение с Hero анимацией
+                Expanded(
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 3.0,
+                    child: imageUrl.startsWith('assets/')
+                      ? Image.asset(
+                          imageUrl,
+                          fit: BoxFit.contain,
+                        )
+                      : CachedNetworkImage(
+                          imageUrl: imageUrl,
+                          fit: BoxFit.contain,
+                          placeholder: (context, url) => const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          ),
+                          errorWidget: (context, url, error) => const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: Colors.white,
+                                  size: 48,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Не удалось загрузить изображение',
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                  ),
+                ),
+                
+                // Кнопка закрытия внизу
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF50321B),
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Закрыть', style: TextStyle(color: Colors.white)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showSortingModal() {
     showModalBottomSheet(
       context: context,
@@ -1582,97 +2065,28 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     );
   }
 
-  // Добавить метод для отображения полноразмерного изображения
-  void _showFullImage(BuildContext context, String imageUrl, String productName) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Полупрозрачный фон
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(color: Colors.black87),
-            ),
-            
-            // Изображение
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Название товара вверху
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    productName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                
-                // Изображение с Hero анимацией
-                Expanded(
-                  child: InteractiveViewer(
-                    minScale: 0.5,
-                    maxScale: 3.0,
-                    child: imageUrl.startsWith('assets/')
-                      ? Image.asset(
-                          imageUrl,
-                          fit: BoxFit.contain,
-                        )
-                      : CachedNetworkImage(
-                          imageUrl: imageUrl,
-                          fit: BoxFit.contain,
-                          placeholder: (context, url) => const Center(
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.error_outline,
-                                  color: Colors.white,
-                                  size: 48,
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'Не удалось загрузить изображение',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                  ),
-                ),
-                
-                // Кнопка закрытия внизу
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF50321B),
-                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Закрыть', style: TextStyle(color: Colors.white)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+  // Метод для загрузки популярных запросов
+  Future<void> _loadPopularQueries() async {
+    setState(() {
+      _isLoadingQueries = true;
+    });
+    
+    try {
+      final queries = await _searchService.getPopularQueries();
+      if (mounted) {
+        setState(() {
+          _popularQueries = queries;
+          _isLoadingQueries = false;
+        });
+      }
+    } catch (e) {
+      print('Ошибка при загрузке популярных запросов: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingQueries = false;
+        });
+      }
+    }
   }
 }
 

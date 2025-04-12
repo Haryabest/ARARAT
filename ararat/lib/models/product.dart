@@ -1,7 +1,7 @@
 class Product {
   final String id;
   final String name;
-  final String description;
+  final String? description;
   final double price;
   final String category;
   final List<String> imageUrls;
@@ -9,18 +9,20 @@ class Product {
   final bool available;
   final Map<String, dynamic>? additionalInfo;
   final String? ingredients;
+  final int quantity;
 
   Product({
     required this.id,
     required this.name,
-    required this.description,
+    this.description,
     required this.price,
     required this.category,
     required this.imageUrls,
     required this.weight,
-    this.available = true,
+    required this.available,
     this.additionalInfo,
     this.ingredients,
+    this.quantity = 0,
   });
 
   // Создание Product из Map (для Firestore)
@@ -51,7 +53,7 @@ class Product {
     return Product(
       id: id,
       name: map['name'] ?? '',
-      description: map['description'] ?? '',
+      description: map['description'],
       price: (map['price'] is int) ? (map['price'] as int).toDouble() : (map['price'] ?? 0.0).toDouble(),
       category: map['category'] ?? '',
       imageUrls: images,
@@ -59,6 +61,7 @@ class Product {
       available: map['available'] ?? map['inStock'] ?? true,
       additionalInfo: map['additionalInfo'],
       ingredients: map['ingredients'],
+      quantity: map['quantity'] ?? 0,
     );
   }
 
@@ -74,6 +77,7 @@ class Product {
       'available': available,
       'additionalInfo': additionalInfo,
       'ingredients': ingredients,
+      'quantity': quantity,
     };
   }
 
@@ -89,6 +93,7 @@ class Product {
     bool? available,
     Map<String, dynamic>? additionalInfo,
     String? ingredients,
+    int? quantity,
   }) {
     return Product(
       id: id ?? this.id,
@@ -101,6 +106,7 @@ class Product {
       available: available ?? this.available,
       additionalInfo: additionalInfo ?? this.additionalInfo,
       ingredients: ingredients ?? this.ingredients,
+      quantity: quantity ?? this.quantity,
     );
   }
 } 
