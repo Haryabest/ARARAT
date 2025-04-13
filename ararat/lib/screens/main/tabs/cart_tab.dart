@@ -871,6 +871,7 @@ class CartItem {
   final int quantity;
   final String? weight;
   final String? imageUrl;
+  final String? documentId; // Добавляем поле для хранения документа продукта
   
   CartItem({
     required this.id,
@@ -879,6 +880,7 @@ class CartItem {
     required this.quantity,
     this.weight,
     this.imageUrl,
+    this.documentId, // Новый параметр
   });
   
   // Конвертация из Map в CartItem
@@ -897,13 +899,14 @@ class CartItem {
       quantity: map['quantity'] as int,
       weight: map['weight'] as String?,
       imageUrl: map['imageUrl'] as String?,
+      documentId: map['documentId'] as String?, // Получаем documentId из карты
     );
   }
   
   // Конвертация из CartItem в OrderItem
   OrderItem toOrderItem() {
     return OrderItem(
-      id: id.toString(),
+      id: documentId ?? id.toString(), // Используем documentId, если доступен, иначе id.toString()
       name: name,
       price: price,
       quantity: quantity,

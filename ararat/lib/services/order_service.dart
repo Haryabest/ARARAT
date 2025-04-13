@@ -1040,7 +1040,40 @@ class OrderService {
             print('Предупреждение: Недостаточно товара ${item.id} в наличии. Требуется: ${item.quantity}, В наличии: $currentQuantity');
           }
         } else {
-          print('Предупреждение: Продукт ${item.id} не найден в базе данных');
+          // Если продукт не найден по ID, пытаемся найти его по имени
+          print('Продукт с ID ${item.id} не найден напрямую, пытаемся найти по имени');
+          
+          try {
+            // Выполняем запрос к коллекции products, ищем документ по имени
+            final querySnapshot = await _firestore
+                .collection('products')
+                .where('name', isEqualTo: item.name)
+                .limit(1)
+                .get();
+            
+            if (querySnapshot.docs.isNotEmpty) {
+              final productDoc = querySnapshot.docs.first;
+              final productData = productDoc.data();
+              final currentQuantity = productData['quantity'] as int? ?? 0;
+              
+              if (currentQuantity >= item.quantity) {
+                final newQuantity = currentQuantity - item.quantity;
+                
+                batch.update(productDoc.reference, {
+                  'quantity': newQuantity,
+                  'lastUpdatedAt': FieldValue.serverTimestamp(),
+                });
+                
+                print('Нашли и обновляем продукт по имени: ${item.name}. Количество: $currentQuantity -> $newQuantity');
+              } else {
+                print('Предупреждение: Недостаточно товара ${item.name} в наличии. Требуется: ${item.quantity}, В наличии: $currentQuantity');
+              }
+            } else {
+              print('Предупреждение: Продукт "${item.name}" не найден в базе данных ни по ID, ни по имени');
+            }
+          } catch (e) {
+            print('Ошибка при поиске продукта по имени: $e');
+          }
         }
       }
       

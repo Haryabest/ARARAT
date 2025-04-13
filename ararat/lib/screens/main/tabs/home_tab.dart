@@ -185,6 +185,12 @@ class CartManager {
       final Map<String, dynamic> newProduct = Map<String, dynamic>.from(product);
       newProduct['quantity'] = 1;
       newProduct['id'] = DateTime.now().millisecondsSinceEpoch;
+      
+      // Убедимся, что сохраняем documentId продукта для правильного обновления в Firestore
+      if (product.containsKey('documentId') && product['documentId'] != null) {
+        newProduct['documentId'] = product['documentId'];
+      }
+      
       newList.add(newProduct);
     }
     
@@ -955,6 +961,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           'description': description,
           'ingredients': ingredients,
           'quantity': quantity,
+          'documentId': name, // Используем имя как идентификатор документа, если реальный ID не доступен
         };
         
         showProductDetailSheet(context, product).then((result) {

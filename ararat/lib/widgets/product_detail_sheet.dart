@@ -582,13 +582,21 @@ Future<Map<String, dynamic>?> showProductDetailSheet(
   BuildContext context, 
   Map<String, dynamic> product
 ) {
+  // Создаем копию продукта, чтобы не изменять оригинал
+  final productCopy = Map<String, dynamic>.from(product);
+  
+  // Убедимся, что у продукта есть documentId для правильного обновления в Firestore
+  if (product.containsKey('id') && !product.containsKey('documentId')) {
+    productCopy['documentId'] = product['id'];
+  }
+  
   return showModalBottomSheet<Map<String, dynamic>>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     enableDrag: true,
     builder: (BuildContext context) {
-      return ProductDetailSheet(product: product);
+      return ProductDetailSheet(product: productCopy);
     },
   );
 } 
