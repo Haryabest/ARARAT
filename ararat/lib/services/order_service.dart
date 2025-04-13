@@ -940,6 +940,130 @@ class OrderService {
     }
   }
   
+  // Проверка возможности восстановления заказа
+  Future<Map<String, dynamic>> checkOrderRestorability(String orderId) async {
+    User? user = _auth.currentUser;
+    if (user == null) {
+      throw Exception('Пользователь не авторизован');
+    }
+
+    try {
+      // Проверяем, что заказ есть в истории
+      final historyDoc = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('orderHistory')
+          .doc(orderId)
+          .get();
+          
+      if (!historyDoc.exists) {
+        throw Exception('Заказ не найден в истории');
+      }
+
+      final historyData = historyDoc.data() as Map<String, dynamic>;
+      if (!historyData['restorable']) {
+        return {
+          'restorable': false,
+          'message': 'Этот заказ невозможно восстановить',
+          'unavailableItems': [],
+        };
+      }
+
+      // Получаем список товаров из заказа
+      final originalData = historyData['originalData'] as Map<String, dynamic>;
+      final items = originalData['items'] as List<dynamic>? ?? [];
+      
+      if (items.isEmpty) {
+        return {
+          'restorable': true,
+          'message': 'Заказ можно восстановить',
+          'unavailableItems': [],
+        };
+      }
+      
+      // Проверяем наличие товаров
+      List<Map<String, dynamic>> unavailableItems = [];
+      
+      for (var item in items) {
+        final Map<String, dynamic> itemData = item as Map<String, dynamic>;
+        final String itemId = itemData['id'] as String? ?? '';
+        final int quantity = itemData['quantity'] as int? ?? 0;
+        final String itemName = itemData['name'] as String? ?? '';
+        
+        if (itemId.isEmpty || quantity <= 0) {
+          continue;
+        }
+        
+        // Проверяем наличие товара по его ID
+        bool isAvailable = false;
+        int availableQuantity = 0;
+        
+        try {
+          // Пытаемся найти продукт по ID
+          final productDoc = await _firestore.collection('products').doc(itemId).get();
+          
+          if (productDoc.exists) {
+            final productData = productDoc.data() as Map<String, dynamic>;
+            availableQuantity = productData['quantity'] as int? ?? 0;
+            isAvailable = availableQuantity >= quantity;
+          } else {
+            // Если продукт не найден по ID, пытаемся найти по имени
+            final querySnapshot = await _firestore
+                .collection('products')
+                .where('name', isEqualTo: itemName)
+                .limit(1)
+                .get();
+            
+            if (querySnapshot.docs.isNotEmpty) {
+              final productDoc = querySnapshot.docs.first;
+              final productData = productDoc.data();
+              availableQuantity = productData['quantity'] as int? ?? 0;
+              isAvailable = availableQuantity >= quantity;
+            } else {
+              isAvailable = false;
+              availableQuantity = 0;
+            }
+          }
+          
+          // Если товара недостаточно, добавляем его в список недоступных
+          if (!isAvailable) {
+            unavailableItems.add({
+              'id': itemId,
+              'name': itemName,
+              'requiredQuantity': quantity,
+              'availableQuantity': availableQuantity,
+            });
+          }
+        } catch (e) {
+          print('Ошибка при проверке наличия товара $itemId: $e');
+          // В случае ошибки, перестраховываемся и считаем товар недоступным
+          unavailableItems.add({
+            'id': itemId,
+            'name': itemName,
+            'requiredQuantity': quantity,
+            'availableQuantity': 0,
+            'error': e.toString(),
+          });
+        }
+      }
+      
+      // Определяем, можно ли восстановить заказ
+      final bool restorable = unavailableItems.isEmpty;
+      String message = restorable 
+          ? 'Заказ можно восстановить' 
+          : 'Невозможно восстановить заказ из-за отсутствия товаров';
+      
+      return {
+        'restorable': restorable,
+        'message': message,
+        'unavailableItems': unavailableItems,
+      };
+    } catch (e) {
+      print('Ошибка при проверке возможности восстановления заказа: $e');
+      throw Exception('Не удалось проверить возможность восстановления заказа: ${e.toString()}');
+    }
+  }
+  
   // Восстановление заказа из истории
   Future<void> restoreOrderFromHistory(String orderId) async {
     User? user = _auth.currentUser;
@@ -948,6 +1072,13 @@ class OrderService {
     }
 
     try {
+      // Сначала проверяем возможность восстановления
+      final restorabilityCheck = await checkOrderRestorability(orderId);
+      
+      if (!restorabilityCheck['restorable']) {
+        throw Exception(restorabilityCheck['message']);
+      }
+
       // Проверяем, что заказ есть в истории
       final historyDoc = await _firestore
           .collection('users')
@@ -1003,6 +1134,29 @@ class OrderService {
           .collection('orderHistory')
           .doc(orderId)
           .delete();
+          
+      // Уменьшаем количество товаров, так как заказ восстановлен
+      final originalData = historyData['originalData'] as Map<String, dynamic>;
+      final items = originalData['items'] as List<dynamic>? ?? [];
+      
+      if (items.isNotEmpty) {
+        List<OrderItem> orderItems = [];
+        for (var item in items) {
+          final Map<String, dynamic> itemData = item as Map<String, dynamic>;
+          orderItems.add(OrderItem(
+            id: itemData['id'] as String? ?? '',
+            name: itemData['name'] as String? ?? '',
+            price: (itemData['price'] is int) 
+                ? (itemData['price'] as int).toDouble() 
+                : (itemData['price'] as double? ?? 0.0),
+            quantity: itemData['quantity'] as int? ?? 0,
+            imageUrl: itemData['imageUrl'] as String?,
+          ));
+        }
+        
+        // Вычитаем количество товаров в базе данных, как при создании заказа
+        await updateProductQuantities(orderItems);
+      }
 
       print('Заказ успешно восстановлен из истории с новым статусом: $orderId');
     } catch (e) {
