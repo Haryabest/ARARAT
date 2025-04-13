@@ -2,6 +2,7 @@ import 'package:ararat/widgets/checkout_form.dart';
 import 'package:flutter/material.dart';
 import 'package:ararat/screens/main/main_screen.dart';
 import 'package:ararat/screens/main/tabs/home_tab.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class CartTab extends StatefulWidget {
   const CartTab({super.key});
@@ -404,10 +405,23 @@ class _CartTabState extends State<CartTab> with TickerProviderStateMixin {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: Image.asset(
-                'assets/icons/placeholder.png',
-                fit: BoxFit.cover,
-              ),
+              child: item['imageUrl'] != null && (item['imageUrl'] as String).isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: item['imageUrl'] as String,
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => Image.asset(
+                        'assets/icons/placeholder.png',
+                        fit: BoxFit.cover,
+                      ),
+                      errorWidget: (context, url, error) => Image.asset(
+                        'assets/icons/placeholder.png',
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : Image.asset(
+                      'assets/icons/placeholder.png',
+                      fit: BoxFit.cover,
+                    ),
             ),
           ),
           const SizedBox(width: 12),

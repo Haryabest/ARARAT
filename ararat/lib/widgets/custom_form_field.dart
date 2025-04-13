@@ -155,9 +155,14 @@ class _CustomFormFieldState extends State<CustomFormField> {
               validator: (value) {
                 _userInteracted = true;
                 final error = widget.validator?.call(value);
+                // Не вызываем setState внутри validator, используем postFrameCallback
                 if (_errorText != error) {
-                  setState(() {
-                    _errorText = error;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      setState(() {
+                        _errorText = error;
+                      });
+                    }
                   });
                 }
                 return error;
@@ -172,8 +177,13 @@ class _CustomFormFieldState extends State<CustomFormField> {
               focusNode: widget.focusNode,
               onChanged: (value) {
                 _userInteracted = true;
-                _validateInput(value);
-                widget.onChanged?.call(value);
+                if (widget.onChanged != null) {
+                  widget.onChanged!(value);
+                }
+                // Не используем setState во время build, а запускаем валидацию через postFrameCallback
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _validateInput(value);
+                });
               },
               onFieldSubmitted: widget.onSubmitted,
               textInputAction: widget.textInputAction,
