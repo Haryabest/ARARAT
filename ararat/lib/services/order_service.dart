@@ -506,6 +506,9 @@ class OrderService {
         'updatedAt': now,
       });
 
+      // Восстанавливаем количество товаров в базе данных
+      await restoreProductQuantities(orderId);
+
       print('Заказ успешно отменен и обновлен в обеих коллекциях: $orderId');
     } catch (e) {
       print('Ошибка при отмене заказа: $e');
@@ -1083,6 +1086,94 @@ class OrderService {
     } catch (e) {
       print('Ошибка при обновлении количества товаров: $e');
       // Не пробрасываем ошибку, чтобы не нарушить основной процесс заказа
+    }
+  }
+
+  // Метод для восстановления количества товаров при отмене заказа
+  Future<void> restoreProductQuantities(String orderId) async {
+    try {
+      print('Начинаем восстановление количества товаров для отмененного заказа: $orderId');
+      
+      // Получаем данные заказа
+      final orderDoc = await _ordersCollection.doc(orderId).get();
+      if (!orderDoc.exists) {
+        throw Exception('Заказ не найден');
+      }
+      
+      final orderData = orderDoc.data() as Map<String, dynamic>;
+      final items = orderData['items'] as List<dynamic>? ?? [];
+      
+      if (items.isEmpty) {
+        print('Заказ не содержит товаров для восстановления');
+        return;
+      }
+      
+      final batch = _firestore.batch();
+      
+      for (var item in items) {
+        final Map<String, dynamic> itemData = item as Map<String, dynamic>;
+        final String itemId = itemData['id'] as String? ?? '';
+        final int quantity = itemData['quantity'] as int? ?? 0;
+        final String itemName = itemData['name'] as String? ?? '';
+        
+        if (itemId.isEmpty || quantity <= 0) {
+          print('Пропускаем товар с некорректными данными: $itemData');
+          continue;
+        }
+        
+        // Пытаемся найти продукт по ID
+        try {
+          final productRef = _firestore.collection('products').doc(itemId);
+          final productDoc = await productRef.get();
+          
+          if (productDoc.exists) {
+            final productData = productDoc.data() as Map<String, dynamic>;
+            final int currentQuantity = productData['quantity'] as int? ?? 0;
+            
+            // Увеличиваем количество товара на количество из заказа
+            batch.update(productRef, {
+              'quantity': currentQuantity + quantity,
+              'lastUpdatedAt': FieldValue.serverTimestamp(),
+            });
+            
+            print('Восстанавливаем количество для продукта $itemId: $currentQuantity -> ${currentQuantity + quantity}');
+          } else {
+            // Если продукт не найден по ID, ищем по имени
+            print('Продукт с ID $itemId не найден напрямую, пытаемся найти по имени');
+            
+            final querySnapshot = await _firestore
+                .collection('products')
+                .where('name', isEqualTo: itemName)
+                .limit(1)
+                .get();
+            
+            if (querySnapshot.docs.isNotEmpty) {
+              final productDoc = querySnapshot.docs.first;
+              final productData = productDoc.data();
+              final int currentQuantity = productData['quantity'] as int? ?? 0;
+              
+              batch.update(productDoc.reference, {
+                'quantity': currentQuantity + quantity,
+                'lastUpdatedAt': FieldValue.serverTimestamp(),
+              });
+              
+              print('Нашли и восстанавливаем продукт по имени: $itemName. Количество: $currentQuantity -> ${currentQuantity + quantity}');
+            } else {
+              print('Предупреждение: Продукт "$itemName" не найден в базе данных ни по ID, ни по имени');
+            }
+          }
+        } catch (e) {
+          print('Ошибка при восстановлении количества товара $itemId: $e');
+          // Продолжаем обработку остальных товаров
+        }
+      }
+      
+      // Выполняем все операции обновления атомарно
+      await batch.commit();
+      print('Успешно восстановлено количество товаров для заказа $orderId');
+    } catch (e) {
+      print('Ошибка при восстановлении количества товаров: $e');
+      // Не пробрасываем ошибку, чтобы не нарушить основной процесс отмены заказа
     }
   }
 } 
