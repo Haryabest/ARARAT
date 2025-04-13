@@ -67,10 +67,13 @@ class FavoritesManager {
     // Проверяем, есть ли товар уже в избранном
     bool isExists = favoriteProducts.any((item) => item['name'] == product['name']);
     if (!isExists) {
-      // Добавляем количество для экрана избранного
-      product['quantity'] = 1;
+      // Добавляем количество для экрана избранного и сохраняем исходное количество
+      final Map<String, dynamic> newProduct = Map<String, dynamic>.from(product);
+      newProduct['quantity'] = 1;
+      newProduct['originalQuantity'] = product['quantity'] ?? 0;
+      
       final newList = List<Map<String, dynamic>>.from(favoriteProducts);
-      newList.add(product);
+      newList.add(newProduct);
       favoritesNotifier.value = newList;
       _saveFavoritesToFirebase();
     }
@@ -112,6 +115,9 @@ class CartManager {
       ValueNotifier<List<Map<String, dynamic>>>([]);
   
   List<Map<String, dynamic>> get cartProducts => cartNotifier.value;
+  
+  // Локальный кэш количества товаров
+  final Map<String, int> _localProductQuantity = {};
 
   // Слушаем изменения аутентификации
   void _listenToAuthChanges() {
@@ -149,8 +155,25 @@ class CartManager {
   }
 
   void addToCart(Map<String, dynamic> product) {
+    // Получаем имя продукта
+    final String productName = product['name'];
+    
+    // Проверяем локальное количество
+    if (!_localProductQuantity.containsKey(productName)) {
+      // Инициализируем локальное количество из product
+      _localProductQuantity[productName] = product['quantity'] as int;
+    }
+    
+    // Если товара больше нет в наличии локально, показываем сообщение и не добавляем
+    if (_localProductQuantity[productName]! <= 0) {
+      return;
+    }
+    
+    // Уменьшаем локальное количество
+    _localProductQuantity[productName] = _localProductQuantity[productName]! - 1;
+    
     // Проверяем, есть ли товар уже в корзине
-    int existingIndex = cartProducts.indexWhere((item) => item['name'] == product['name']);
+    int existingIndex = cartProducts.indexWhere((item) => item['name'] == productName);
     
     final newList = List<Map<String, dynamic>>.from(cartProducts);
     
@@ -169,21 +192,59 @@ class CartManager {
     _saveCartToFirebase();
   }
 
+  // Получение локального количества товара
+  int getLocalQuantity(String productName, int originalQuantity) {
+    if (!_localProductQuantity.containsKey(productName)) {
+      _localProductQuantity[productName] = originalQuantity;
+    }
+    return _localProductQuantity[productName]!;
+  }
+
+  // Проверка, можно ли добавить товар в корзину
+  bool canAddToCart(String productName) {
+    return _localProductQuantity.containsKey(productName) && 
+           _localProductQuantity[productName]! > 0;
+  }
+
+  // Сброс локального количества при удалении из корзины
   void removeFromCart(int productId) {
+    // Находим товар в корзине
+    final item = cartProducts.firstWhere((item) => item['id'] == productId, orElse: () => {});
+    
+    if (item.isNotEmpty) {
+      final String productName = item['name'];
+      final int quantity = item['quantity'] as int;
+      
+      // Возвращаем количество в локальное хранилище
+      if (_localProductQuantity.containsKey(productName)) {
+        _localProductQuantity[productName] = _localProductQuantity[productName]! + quantity;
+      }
+    }
+    
     final newList = List<Map<String, dynamic>>.from(cartProducts);
     newList.removeWhere((item) => item['id'] == productId);
     cartNotifier.value = newList;
     _saveCartToFirebase();
   }
   
+  // Обновление локального количества при изменении количества в корзине
   void incrementQuantity(int productId) {
     final newList = List<Map<String, dynamic>>.from(cartProducts);
     int index = newList.indexWhere((item) => item['id'] == productId);
     
     if (index != -1) {
-      newList[index]['quantity'] += 1;
-      cartNotifier.value = newList;
-      _saveCartToFirebase();
+      final String productName = newList[index]['name'];
+      
+      // Проверяем локальное наличие
+      if (_localProductQuantity.containsKey(productName) && _localProductQuantity[productName]! > 0) {
+        // Уменьшаем локальное количество
+        _localProductQuantity[productName] = _localProductQuantity[productName]! - 1;
+        
+        // Увеличиваем в корзине
+        newList[index]['quantity'] += 1;
+        cartNotifier.value = newList;
+        _saveCartToFirebase();
+      }
     }
   }
   
@@ -192,6 +253,14 @@ class CartManager {
     int index = newList.indexWhere((item) => item['id'] == productId);
     
     if (index != -1 && newList[index]['quantity'] > 1) {
+      final String productName = newList[index]['name'];
+      
+      // Увеличиваем локальное количество
+      if (_localProductQuantity.containsKey(productName)) {
+        _localProductQuantity[productName] = _localProductQuantity[productName]! + 1;
+      }
+      
+      // Уменьшаем в корзине
       newList[index]['quantity'] -= 1;
       cartNotifier.value = newList;
       _saveCartToFirebase();
@@ -199,6 +268,16 @@ class CartManager {
   }
   
   void clearCart() {
+    // Восстанавливаем локальные количества
+    for (var item in cartProducts) {
+      final String productName = item['name'];
+      final int quantity = item['quantity'] as int;
+      
+      if (_localProductQuantity.containsKey(productName)) {
+        _localProductQuantity[productName] = _localProductQuantity[productName]! + quantity;
+      }
+    }
+    
     cartNotifier.value = [];
     _saveCartToFirebase();
   }
@@ -226,6 +305,34 @@ class CartManager {
   
   int getCartItemsCount() {
     return cartProducts.fold(0, (sum, item) => sum + (item['quantity'] as int));
+  }
+
+  // Проверка и удаление товаров, которых нет в наличии
+  void removeOutOfStockItems(List<Map<String, dynamic>> products) {
+    final newList = List<Map<String, dynamic>>.from(cartProducts);
+    bool hasChanges = false;
+    
+    // Проходим по товарам в корзине
+    for (int i = newList.length - 1; i >= 0; i--) {
+      final cartItem = newList[i];
+      final String cartItemName = cartItem['name'];
+      
+      // Ищем соответствующий товар в списке продуктов
+      final productExists = products.any((product) => 
+        product['name'] == cartItemName && product['inStock'] == true);
+      
+      // Если товара нет в наличии, удаляем его из корзины
+      if (!productExists) {
+        newList.removeAt(i);
+        hasChanges = true;
+      }
+    }
+    
+    // Обновляем корзину только если были изменения
+    if (hasChanges) {
+      cartNotifier.value = newList;
+      _saveCartToFirebase();
+    }
   }
 }
 
@@ -368,9 +475,61 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           // После загрузки продуктов загружаем категории
           _loadCategories();
           _isLoading = false;
+          
+          // Проверяем и удаляем товары из корзины, которых нет в наличии
+          final List<Map<String, dynamic>> productsMap = productsList.map((product) => {
+            'name': product.name,
+            'inStock': product.available && product.quantity > 0,
+          }).toList();
+          
+          _cartManager.removeOutOfStockItems(productsMap);
+          
+          // Обновляем исходное количество товаров в избранном
+          _updateFavoritesOriginalQuantity(productsList);
         });
       }
     });
+  }
+
+  // Метод для обновления исходного количества в избранных товарах
+  void _updateFavoritesOriginalQuantity(List<Product> products) {
+    final favorites = _favoritesManager.favoriteProducts;
+    if (favorites.isEmpty) return;
+    
+    final newList = List<Map<String, dynamic>>.from(favorites);
+    bool hasChanges = false;
+    
+    for (int i = 0; i < newList.length; i++) {
+      final String favoriteName = newList[i]['name'];
+      
+      // Находим соответствующий продукт по имени
+      final product = products.firstWhere(
+        (p) => p.name == favoriteName,
+        orElse: () => Product(
+          id: '',
+          name: '',
+          price: 0,
+          category: '',
+          imageUrls: [],
+          weight: '',
+          available: false,
+          quantity: 0,
+        ),
+      );
+      
+      // Если нашли продукт и его количество отличается от текущего
+      if (product.name.isNotEmpty && 
+          (newList[i]['originalQuantity'] == null || 
+           newList[i]['originalQuantity'] != product.quantity)) {
+        newList[i]['originalQuantity'] = product.quantity;
+        hasChanges = true;
+      }
+    }
+    
+    // Обновляем список, только если были изменения
+    if (hasChanges) {
+      _favoritesManager.favoritesNotifier.value = newList;
+    }
   }
 
   void _filterCategories() {
@@ -774,6 +933,10 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     final bool isFavorite = _favoritesManager.isFavorite(name);
     _cartManager.isInCart(name);
     
+    // Получаем локальное количество товара
+    final int localQuantity = _cartManager.getLocalQuantity(name, quantity);
+    final bool canAddMore = localQuantity > 0;
+    
     return GestureDetector(
       onTap: () {
         // Открываем детальную информацию о товаре
@@ -791,6 +954,9 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           if (result != null && result['action'] == 'add_to_cart') {
             // Если пользователь нажал кнопку "Добавить в корзину"
             _cartManager.addToCart(product);
+            
+            // Обновляем UI после изменения локального количества
+            setState(() {});
           }
         });
       },
@@ -855,7 +1021,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: quantity > 0 ? const Color(0xFF6C4425) : Colors.red[700],
+                                    color: localQuantity > 0 ? const Color(0xFF6C4425) : Colors.red[700],
                                     borderRadius: BorderRadius.circular(12),
                                     boxShadow: [
                                       BoxShadow(
@@ -866,7 +1032,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                     ],
                                   ),
                                   child: Text(
-                                    quantity > 0 ? '$quantity шт' : 'Нет в наличии',
+                                    localQuantity > 0 ? '$localQuantity шт' : 'Нет в наличии',
                                     style: const TextStyle(
                                       fontFamily: 'Inter',
                                       fontSize: 10,
@@ -937,9 +1103,9 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                         children: [
                           Expanded(
                             child: GestureDetector(
-                              onTap: () {
+                              onTap: canAddMore ? () {
                                 // Добавляем товар в корзину
-                                final product = {
+                                final productData = {
                                   'name': name,
                                   'price': price,
                                   'weight': weight,
@@ -947,13 +1113,46 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                                   'description': description,
                                   'ingredients': ingredients,
                                   'quantity': quantity,
+                                  'inStock': quantity > 0,
                                 };
-                                _cartManager.addToCart(product);
+                                _cartManager.addToCart(productData);
+                                
+                                // Обновляем интерфейс после изменения локального количества
+                                setState(() {});
+                                
+                                // Показываем сообщение
+                                if (!_cartManager.canAddToCart(name)) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Нельзя добавить больше этого товара'),
+                                      backgroundColor: Colors.red,
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                } else {
+                                  // Показываем уведомление о добавлении товара в корзину
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('${name} добавлен в корзину'),
+                                      backgroundColor: const Color(0xFF6C4425),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              } : () {
+                                // Показываем уведомление о невозможности добавления
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Нельзя добавить больше этого товара'),
+                                    backgroundColor: Colors.red,
+                                    duration: Duration(seconds: 2),
+                                  ),
+                                );
                               },
                               child: Container(
                                 height: 36,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF4B260A),
+                                  color: canAddMore ? const Color(0xFF4B260A) : Colors.grey[400],
                                   borderRadius: BorderRadius.circular(18),
                                 ),
                                 child: Center(
@@ -1586,6 +1785,10 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   
   // Метод для создания элемента результата поиска
   Widget _buildSearchResultItem(Product product) {
+    // Получаем локальное количество товара
+    final int localQuantity = _cartManager.getLocalQuantity(product.name, product.quantity);
+    final bool canAddMore = localQuantity > 0;
+    
     return GestureDetector(
       onTap: () {
         // Закрываем поиск
@@ -1605,6 +1808,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
         showProductDetailSheet(context, productData).then((result) {
           if (result != null && result['action'] == 'add_to_cart') {
             _cartManager.addToCart(productData);
+            setState(() {}); // Обновляем UI
           }
         });
       },
@@ -1714,7 +1918,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
             Padding(
               padding: const EdgeInsets.all(12),
               child: GestureDetector(
-                onTap: () {
+                onTap: canAddMore ? () {
                   final productData = {
                     'name': product.name,
                     'price': product.price.toInt(),
@@ -1723,15 +1927,39 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                     'description': product.description,
                     'ingredients': product.ingredients,
                     'quantity': product.quantity,
+                    'inStock': product.quantity > 0,
                   };
                   _cartManager.addToCart(productData);
                   
-                  // Показываем уведомление о добавлении товара в корзину
+                  // Обновляем интерфейс после изменения локального количества
+                  setState(() {});
+                  
+                  // Показываем сообщение
+                  if (!_cartManager.canAddToCart(product.name)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Нельзя добавить больше этого товара'),
+                        backgroundColor: Colors.red,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  } else {
+                    // Показываем уведомление о добавлении товара в корзину
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${product.name} добавлен в корзину'),
+                        backgroundColor: const Color(0xFF6C4425),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                } : () {
+                  // Показываем уведомление о невозможности добавления
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${product.name} добавлен в корзину'),
-                      backgroundColor: const Color(0xFF6C4425),
-                      duration: const Duration(seconds: 2),
+                    const SnackBar(
+                      content: Text('Нельзя добавить больше этого товара'),
+                      backgroundColor: Colors.red,
+                      duration: Duration(seconds: 2),
                     ),
                   );
                 },
@@ -1739,7 +1967,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6C4425),
+                    color: canAddMore ? const Color(0xFF6C4425) : Colors.grey[400],
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Icon(

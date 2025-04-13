@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:ararat/screens/main/tabs/home_tab.dart'; // Импортируем для доступа к CartManager
 
 class ProductDetailSheet extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -28,6 +29,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
   double _currentHeight = _initialSheetHeight;
   // Контроллер для определения позиции пальца при перетаскивании
   double _dragStartPosition = 0;
+  
+  // Получаем CartManager для проверки локального количества
+  final CartManager _cartManager = CartManager();
   
   @override
   void initState() {
@@ -82,6 +86,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
     // Размер экрана для ограничения максимальной высоты
     final screenHeight = MediaQuery.of(context).size.height;
     final maxSheetHeight = screenHeight * 0.9; // 90% от высоты экрана
+    
+    // Получаем локальное количество товара для отображения статуса
+    final String productName = widget.product['name'];
+    final int originalQuantity = widget.product['quantity'] ?? 0;
+    final int localQuantity = _cartManager.getLocalQuantity(productName, originalQuantity);
+    final bool isAvailable = localQuantity > 0;
     
     return GestureDetector(
       // Обрабатываем начало перетаскивания
@@ -230,7 +240,39 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
                           ),
                         ],
                       ),
-                      child: _buildProductImage(widget.product['imageUrl']),
+                      child: Stack(
+                        children: [
+                          _buildProductImage(widget.product['imageUrl']),
+                          // Индикатор наличия товара
+                          Positioned(
+                            right: 8,
+                            bottom: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isAvailable ? const Color(0xFF6C4425) : Colors.red[700],
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    blurRadius: 2,
+                                    offset: const Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                isAvailable ? '$localQuantity шт' : 'Нет в наличии',
+                                style: const TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -320,6 +362,18 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
                             ],
                           ),
                           
+                          // Статус наличия товара
+                          const SizedBox(height: 8),
+                          Text(
+                            isAvailable ? 'В наличии' : 'Нет в наличии',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isAvailable ? Colors.green[300] : Colors.red[300],
+                            ),
+                          ),
+                          
                           // Дополнительная информация, видна при растягивании
                           if (expansionProgress > 0)
                             Opacity(
@@ -378,32 +432,82 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
                                   SizedBox(
                                     width: double.infinity,
                                     height: 50,
-                                    child: ElevatedButton(
-                                      onPressed: () {
-                                        // Логика для добавления в корзину
-                                        Navigator.pop(context, {'action': 'add_to_cart'});
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF4B260A),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(16),
+                                    child: isAvailable
+                                      ? ElevatedButton(
+                                          onPressed: () {
+                                            // Локальное количество обновится при добавлении через CartManager
+                                            Navigator.pop(context, {'action': 'add_to_cart'});
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: const Color(0xFF4B260A),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Добавить в корзину',
+                                            style: TextStyle(
+                                              fontFamily: 'Inter',
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        )
+                                      : Container(
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[400],
+                                            borderRadius: BorderRadius.circular(16),
+                                          ),
+                                          child: const Text(
+                                            'Нет в наличии',
+                                            style: TextStyle(
+                                              fontFamily: 'Inter',
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.white,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      child: const Text(
-                                        'Добавить в корзину',
-                                        style: TextStyle(
-                                          fontFamily: 'Inter',
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
                                   ),
                                 ],
                               ),
                             ),
                         ],
+                      ),
+                    ),
+                  ),
+                ),
+                
+                // Кнопка закрытия
+                Positioned(
+                  top: 16,
+                  right: 16,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.close,
+                          size: 18,
+                          color: Colors.black54,
+                        ),
                       ),
                     ),
                   ),

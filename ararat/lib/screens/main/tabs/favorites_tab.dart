@@ -13,19 +13,8 @@ class FavoritesTab extends StatefulWidget {
 class _FavoritesTabState extends State<FavoritesTab> {
   // Используем общий менеджер избранного
   final _favoritesManager = FavoritesManager();
-
-  // Метод для изменения количества товара
-  void _updateQuantity(int index, int delta) {
-    final product = _favoritesManager.favoriteProducts[index];
-    int newQuantity = product['quantity'] + delta;
-    
-    if (newQuantity > 0) {
-      // Создаем новый список для обновления
-      final newList = List<Map<String, dynamic>>.from(_favoritesManager.favoriteProducts);
-      newList[index]['quantity'] = newQuantity;
-      _favoritesManager.favoritesNotifier.value = newList;
-    }
-  }
+  // Добавляем менеджер корзины
+  final _cartManager = CartManager();
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +112,13 @@ class _FavoritesTabState extends State<FavoritesTab> {
   }
 
   Widget _buildFavoriteItem(Map<String, dynamic> item, int index) {
+    final String productName = item['name'];
+    final int originalQuantity = item['originalQuantity'] ?? 1;
+    
+    // Получаем локальное доступное количество товара
+    final int localQuantity = _cartManager.getLocalQuantity(productName, originalQuantity);
+    final bool canAddToCart = localQuantity > 0;
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -144,9 +140,11 @@ class _FavoritesTabState extends State<FavoritesTab> {
                       child: SizedBox(
                         width: 80,
                         height: 80,
-                        child: item['imageUrl'] != null && item['imageUrl'].toString().startsWith('http')
+                        child: item['imageUrl'] != null 
                             ? CachedNetworkImage(
                                 imageUrl: item['imageUrl'],
+                                width: 80,
+                                height: 80,
                                 fit: BoxFit.cover,
                                 placeholder: (context, url) => Container(
                                   color: Colors.grey[300],
@@ -207,6 +205,16 @@ class _FavoritesTabState extends State<FavoritesTab> {
                               color: Color(0xFF8E8B8B),
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            canAddToCart ? 'Доступно: $localQuantity шт' : 'Нет в наличии',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: canAddToCart ? Colors.white70 : Colors.red[300],
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -214,27 +222,46 @@ class _FavoritesTabState extends State<FavoritesTab> {
                 ),
               ),
               
-              // Кнопка оформления заказа
+              // Кнопка добавления в корзину
               Container(
                 width: double.infinity,
                 height: 40,
                 margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                 child: ElevatedButton(
-                  onPressed: () {
-                    // Логика оформления заказа
+                  onPressed: canAddToCart ? () {
+                    // Добавляем товар в корзину (один раз)
+                    final product = {
+                      'name': item['name'],
+                      'price': item['price'],
+                      'weight': item['weight'],
+                      'imageUrl': item['imageUrl'],
+                      'quantity': originalQuantity,
+                      'inStock': true,
+                    };
+                    
+                    _cartManager.addToCart(product);
+                    
+                    // Обновляем UI для отображения нового локального количества
+                    setState(() {});
+                    
+                    // Показываем уведомление
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Заказ оформлен')),
+                      SnackBar(
+                        content: Text('${item['name']} добавлен в корзину'),
+                        backgroundColor: const Color(0xFF6C4425),
+                        duration: const Duration(seconds: 2),
+                      ),
                     );
-                  },
+                  } : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4B260A),
+                    backgroundColor: canAddToCart ? const Color(0xFF4B260A) : Colors.grey[400],
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                     padding: EdgeInsets.zero,
                   ),
                   child: const Text(
-                    'Оформить заказ',
+                    'Добавить в корзину',
                     style: TextStyle(
                       fontFamily: 'Inter',
                       fontSize: 14,
@@ -267,51 +294,6 @@ class _FavoritesTabState extends State<FavoritesTab> {
                   size: 16,
                   color: Colors.red,
                 ),
-              ),
-            ),
-          ),
-          
-          // Счетчик количества под кнопкой удаления
-          Positioned(
-            top: 45,
-            right: 10,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              height: 28,
-              width: 90,
-              decoration: BoxDecoration(
-                color: const Color(0xFF4B260A),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  GestureDetector(
-                    onTap: () => _updateQuantity(index, -1),
-                    child: const Icon(
-                      Icons.remove,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                  Text(
-                    '${item['quantity']}',
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => _updateQuantity(index, 1),
-                    child: const Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 16,
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
