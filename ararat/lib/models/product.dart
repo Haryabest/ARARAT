@@ -10,6 +10,9 @@ class Product {
   final Map<String, dynamic>? additionalInfo;
   final String? ingredients;
   final int quantity;
+  final String unit;
+  final List<String> tags;
+  final bool special;
 
   Product({
     required this.id,
@@ -23,6 +26,9 @@ class Product {
     this.additionalInfo,
     this.ingredients,
     this.quantity = 0,
+    required this.unit,
+    required this.tags,
+    required this.special,
   });
 
   // Создание Product из Map (для Firestore)
@@ -62,6 +68,9 @@ class Product {
       additionalInfo: map['additionalInfo'],
       ingredients: map['ingredients'],
       quantity: map['quantity'] ?? 0,
+      unit: map['unit'] ?? '',
+      tags: List<String>.from(map['tags'] ?? []),
+      special: map['special'] ?? false,
     );
   }
 
@@ -78,6 +87,9 @@ class Product {
       'additionalInfo': additionalInfo,
       'ingredients': ingredients,
       'quantity': quantity,
+      'unit': unit,
+      'tags': tags,
+      'special': special,
     };
   }
 
@@ -94,6 +106,9 @@ class Product {
     Map<String, dynamic>? additionalInfo,
     String? ingredients,
     int? quantity,
+    String? unit,
+    List<String>? tags,
+    bool? special,
   }) {
     return Product(
       id: id ?? this.id,
@@ -107,6 +122,28 @@ class Product {
       additionalInfo: additionalInfo ?? this.additionalInfo,
       ingredients: ingredients ?? this.ingredients,
       quantity: quantity ?? this.quantity,
+      unit: unit ?? this.unit,
+      tags: tags ?? this.tags,
+      special: special ?? this.special,
+    );
+  }
+
+  // Метод для обновления количества товара
+  Product copyWithUpdatedQuantity(int newQuantity) {
+    return Product(
+      id: id,
+      name: name,
+      price: price,
+      category: category,
+      description: description,
+      ingredients: ingredients,
+      weight: weight,
+      available: available,
+      quantity: newQuantity, // Используем новое количество
+      imageUrls: List.from(imageUrls),
+      unit: unit,
+      tags: List.from(tags),
+      special: special,
     );
   }
 } 

@@ -6,6 +6,7 @@ import 'package:ararat/services/product_service.dart';
 import 'package:ararat/models/product.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:ararat/services/search_service.dart';
+import 'package:ararat/services/product_update_notifier.dart';
 
 // Глобальный класс для хранения данных избранного (в реальном приложении это должен быть провайдер или менеджер состояния)
 class FavoritesManager {
@@ -347,6 +348,21 @@ class CartManager {
       _saveCartToFirebase();
     }
   }
+
+  // Метод для обновления локальных количеств товаров в корзине
+  void refreshLocalQuantities(List<Map<String, dynamic>> products) {
+    print('Обновление локальных количеств товаров в корзине');
+    for (var product in products) {
+      final String productName = product['name'];
+      final int quantity = product['quantity'] as int? ?? 0;
+      _localProductQuantity[productName] = quantity;
+    }
+    // Обновляем UI
+    final newList = List<Map<String, dynamic>>.from(cartProducts);
+    cartNotifier.value = newList;
+    
+    print('Локальные количества товаров обновлены');
+  }
 }
 
 class HomeTab extends StatefulWidget {
@@ -411,47 +427,44 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     
-    // Загружаем категории и продукты
-    _loadProducts();
-    
-    // Загружаем популярные запросы
-    _loadPopularQueries();
-    
-    // Инициализируем контроллер скролла
-    _scrollController = ScrollController();
-    _scrollController.addListener(_onScroll);
-    
+    // Инициализируем контроллер для анимации поиска
     _searchAnimController = AnimationController(
-      vsync: this,
       duration: const Duration(milliseconds: 300),
+      vsync: this,
     );
+    
     _searchAnimation = CurvedAnimation(
       parent: _searchAnimController,
       curve: Curves.easeInOut,
     );
     
-    // Добавляем слушатель изменений текста поиска
-    _searchController.addListener(_onSearchChanged);
+    // Инициализируем контроллер для скролла
+    _scrollController = ScrollController();
+    _scrollController.addListener(_scrollListener);
     
-    // Инициализация анимации обновления
+    // Инициализируем контроллер для анимации обновления
     _refreshAnimController = AnimationController(
+      duration: const Duration(milliseconds: 1000),
       vsync: this,
-      duration: const Duration(milliseconds: 300),
     );
-    _refreshAnimation = CurvedAnimation(
-      parent: _refreshAnimController,
-      curve: Curves.easeInOut,
-    );
+    
+    _refreshAnimation = Tween<double>(
+      begin: 0,
+      end: 2 * 3.14159, // Полный оборот
+    ).animate(_refreshAnimController);
     
     // Инициализируем контроллер для скелетной анимации
-    _shimmerController = AnimationController.unbounded(vsync: this)
-      ..repeat(min: -0.5, max: 1.5, period: const Duration(milliseconds: 1000));
-      
+    _shimmerController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    )..repeat();
+    
     // Инициализируем контроллер для анимации избранного
     _favoriteAnimController = AnimationController(
-      vsync: this,
       duration: const Duration(milliseconds: 300),
+      vsync: this,
     );
+    
     _favoriteAnimation = CurvedAnimation(
       parent: _favoriteAnimController,
       curve: Curves.elasticOut,
@@ -459,9 +472,72 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     
     // Инициализируем контроллер для анимации корзины
     _cartAnimController = AnimationController(
-      vsync: this,
       duration: const Duration(milliseconds: 300),
+      vsync: this,
     );
+    
+    // Добавляем метод загрузки данных
+    _loadData();
+    
+    // Добавляем слушателя для обновления списка товаров
+    ProductUpdateNotifier().updateNotifier.addListener(_onProductsUpdated);
+  }
+  
+  // Метод, вызываемый при обновлении товаров
+  void _onProductsUpdated() {
+    if (mounted) {
+      print('Получено уведомление об обновлении товаров, обновляем список');
+      
+      // Принудительно сбрасываем кэш продуктов
+      _products = [];
+      _filteredProducts = [];
+      
+      // Перезагружаем данные с принудительным обновлением
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // Полностью перезагружаем данные из Firebase
+      _productService.getProductsDirectly().then((productsList) {
+        if (mounted) {
+          setState(() {
+            _products = productsList;
+            _loadCategories();
+            _isLoading = false;
+            
+            // Принудительно обновляем локальный кэш товаров в корзине
+            final List<Map<String, dynamic>> productsMap = productsList.map((product) => {
+              'name': product.name,
+              'inStock': product.available && product.quantity > 0,
+              'quantity': product.quantity
+            }).toList();
+            
+            // Обновляем и отображаем товары в корзине
+            _cartManager.refreshLocalQuantities(productsMap);
+            
+            // Обновляем исходное количество товаров в избранном
+            _updateFavoritesOriginalQuantity(productsList);
+          });
+        }
+      });
+    }
+  }
+  
+  @override
+  void dispose() {
+    _searchAnimController.dispose();
+    _scrollController.dispose();
+    _refreshAnimController.dispose();
+    _shimmerController.dispose();
+    _favoriteAnimController.dispose();
+    _cartAnimController.dispose();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    
+    // Удаляем слушателя обновлений продуктов
+    ProductUpdateNotifier().updateNotifier.removeListener(_onProductsUpdated);
+    
+    super.dispose();
   }
   
   void _loadCategories() {
@@ -493,8 +569,11 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           final List<Map<String, dynamic>> productsMap = productsList.map((product) => {
             'name': product.name,
             'inStock': product.available && product.quantity > 0,
+            'quantity': product.quantity
           }).toList();
           
+          // Обновляем локальный кэш количеств в корзине
+          _cartManager.refreshLocalQuantities(productsMap);
           _cartManager.removeOutOfStockItems(productsMap);
           
           // Обновляем исходное количество товаров в избранном
@@ -527,6 +606,9 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
           weight: '',
           available: false,
           quantity: 0,
+          unit: '',
+          tags: [],
+          special: false,
         ),
       );
       
@@ -670,19 +752,45 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     _sortProducts();
   }
   
-  @override
-  void dispose() {
-    _searchAnimController.dispose();
-    _searchController.removeListener(_onSearchChanged); // Удаляем слушатель
-    _searchController.dispose();
-    _searchFocusNode.dispose();
-    _shimmerController.dispose();
-    _favoriteAnimController.dispose();
-    _refreshAnimController.dispose();
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    _cartAnimController.dispose();
-    super.dispose();
+  void _scrollListener() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent) {
+      // Load more data
+      _loadMoreProducts();
+    }
+  }
+  
+  void _loadMoreProducts() {
+    // Реализуем логику загрузки дополнительных товаров
+    print('Загрузка дополнительных товаров...');
+    
+    // Обновляем количество товаров, если изменились данные в БД
+    _productService.refreshQuantities().then((updatedProducts) {
+      if (mounted && updatedProducts.isNotEmpty) {
+        setState(() {
+          // Обновляем количество в существующих продуктах
+          for (var updatedProduct in updatedProducts) {
+            final index = _products.indexWhere((p) => p.id == updatedProduct.id);
+            if (index != -1) {
+              _products[index] = updatedProduct;
+            }
+          }
+          
+          // Обновляем отфильтрованные продукты
+          _filterProductsByCategory();
+          
+          // Обновляем доступность товаров в корзине
+          final List<Map<String, dynamic>> productsMap = _products.map((product) => {
+            'name': product.name,
+            'inStock': product.available && product.quantity > 0,
+          }).toList();
+          
+          _cartManager.removeOutOfStockItems(productsMap);
+          
+          // Обновляем количество в избранном
+          _updateFavoritesOriginalQuantity(_products);
+        });
+      }
+    });
   }
   
   void _toggleSearch() {
@@ -2329,6 +2437,16 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
         });
       }
     }
+  }
+
+  // Добавляем метод загрузки данных
+  void _loadData() {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    // Загружаем продукты
+    _loadProducts();
   }
 }
 

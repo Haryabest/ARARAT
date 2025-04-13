@@ -74,4 +74,62 @@ class ProductService {
       rethrow;
     }
   }
+
+  // Метод для обновления количества продуктов без полной загрузки
+  Future<List<Product>> refreshQuantities() async {
+    try {
+      List<Product> updatedProducts = [];
+      
+      // Получаем только обновленные товары (с измененным количеством)
+      final querySnapshot = await _productsCollection
+          .orderBy('lastUpdatedAt', descending: true)
+          .limit(20) // Ограничиваем запрос 20 последними обновленными товарами
+          .get();
+      
+      for (var doc in querySnapshot.docs) {
+        try {
+          final data = doc.data() as Map<String, dynamic>;
+          final product = Product.fromMap(data, doc.id);
+          updatedProducts.add(product);
+        } catch (e) {
+          print('Ошибка при обработке обновленного товара: $e');
+        }
+      }
+      
+      print('Обновлено количество для ${updatedProducts.length} товаров');
+      return updatedProducts;
+    } catch (e) {
+      print('Ошибка при обновлении количества товаров: $e');
+      return [];
+    }
+  }
+
+  // Метод для прямого получения продуктов (без стрима) для принудительного обновления
+  Future<List<Product>> getProductsDirectly({String? category}) async {
+    try {
+      Query query = _productsCollection;
+      
+      if (category != null && category.isNotEmpty) {
+        query = query.where('category', isEqualTo: category);
+      }
+      
+      final querySnapshot = await query.get();
+      List<Product> products = [];
+      
+      for (var doc in querySnapshot.docs) {
+        try {
+          final data = doc.data() as Map<String, dynamic>;
+          products.add(Product.fromMap(data, doc.id));
+        } catch (e) {
+          print('Ошибка при обработке продукта: $e');
+        }
+      }
+      
+      print('Напрямую загружено ${products.length} продуктов');
+      return products;
+    } catch (e) {
+      print('Ошибка при прямой загрузке продуктов: $e');
+      return [];
+    }
+  }
 } 

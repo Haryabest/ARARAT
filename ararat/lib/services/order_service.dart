@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ararat/widgets/checkout_form.dart';
 import 'package:uuid/uuid.dart';
 import 'package:intl/intl.dart';
+import 'package:ararat/services/product_update_notifier.dart';
 
 class Order {
   final String id;
@@ -508,6 +509,9 @@ class OrderService {
 
       // Восстанавливаем количество товаров в базе данных
       await restoreProductQuantities(orderId);
+      
+      // Уведомляем об обновлении товаров, чтобы обновить главный экран
+      ProductUpdateNotifier().notifyProductsUpdated();
 
       print('Заказ успешно отменен и обновлен в обеих коллекциях: $orderId');
     } catch (e) {
@@ -772,7 +776,156 @@ class OrderService {
         return '#9E9E9E'; // Grey
     }
   }
-  
+
+  // Метод для обновления количества товаров в базе данных после оформления заказа
+  Future<void> updateProductQuantities(List<OrderItem> items) async {
+    try {
+      print('Начинаем обновление количества товаров после оформления заказа');
+      
+      final batch = _firestore.batch();
+      
+      for (var item in items) {
+        if (item.id.isEmpty || item.quantity <= 0) continue;
+        
+        try {
+          // Получаем документ продукта
+          final productRef = _firestore.collection('products').doc(item.id);
+          final productDoc = await productRef.get();
+          
+          if (productDoc.exists) {
+            final productData = productDoc.data() as Map<String, dynamic>;
+            final currentQuantity = productData['quantity'] as int? ?? 0;
+            
+            if (currentQuantity >= item.quantity) {
+              // Обновляем количество товара в главной коллекции
+              batch.update(productRef, {
+                'quantity': currentQuantity - item.quantity,
+                'lastUpdatedAt': FieldValue.serverTimestamp()
+              });
+              
+              print('Обновляем количество для продукта ${item.name}: $currentQuantity -> ${currentQuantity - item.quantity}');
+            } else {
+              print('Недостаточно товара ${item.name} в наличии: $currentQuantity');
+            }
+          } else {
+            // Ищем по имени, если по ID не нашли
+            final querySnapshot = await _firestore
+                .collection('products')
+                .where('name', isEqualTo: item.name)
+                .limit(1)
+                .get();
+                
+            if (querySnapshot.docs.isNotEmpty) {
+              final doc = querySnapshot.docs.first;
+              final data = doc.data();
+              final currentQuantity = data['quantity'] as int? ?? 0;
+              
+              if (currentQuantity >= item.quantity) {
+                // Обновляем количество товара в главной коллекции по имени
+                batch.update(doc.reference, {
+                  'quantity': currentQuantity - item.quantity,
+                  'lastUpdatedAt': FieldValue.serverTimestamp()
+                });
+                
+                print('Обновляем количество для продукта ${item.name} (найден по имени): ${currentQuantity - item.quantity}');
+              }
+            }
+          }
+        } catch (e) {
+          print('Ошибка при обработке товара ${item.name}: $e');
+        }
+      }
+      
+      // Применяем все изменения
+      await batch.commit();
+      print('Успешно обновлено количество товаров в БД');
+    } catch (e) {
+      print('Ошибка при обновлении количества товаров: $e');
+      throw Exception('Не удалось обновить количество товаров: $e');
+    }
+  }
+
+  // Метод для восстановления количества товаров при отмене заказа
+  Future<void> restoreProductQuantities(String orderId) async {
+    try {
+      print('Начинаем восстановление количества товаров для отмененного заказа: $orderId');
+      
+      // Получаем данные заказа
+      final orderDoc = await _ordersCollection.doc(orderId).get();
+      if (!orderDoc.exists) {
+        throw Exception('Заказ не найден');
+      }
+      
+      final orderData = orderDoc.data() as Map<String, dynamic>;
+      final items = orderData['items'] as List<dynamic>? ?? [];
+      
+      if (items.isEmpty) {
+        print('Заказ не содержит товаров для восстановления');
+        return;
+      }
+      
+      final batch = _firestore.batch();
+      
+      for (var item in items) {
+        try {
+          final Map<String, dynamic> itemData = item as Map<String, dynamic>;
+          final String itemId = itemData['id'] as String? ?? '';
+          final int quantity = itemData['quantity'] as int? ?? 0;
+          final String itemName = itemData['name'] as String? ?? '';
+          
+          if (itemId.isEmpty || quantity <= 0) continue;
+          
+          // Получаем документ продукта из главной коллекции
+          final productRef = _firestore.collection('products').doc(itemId);
+          final productDoc = await productRef.get();
+          
+          if (productDoc.exists) {
+            final productData = productDoc.data() as Map<String, dynamic>;
+            final currentQuantity = productData['quantity'] as int? ?? 0;
+            
+            // Обновляем количество товара в главной коллекции
+            batch.update(productRef, {
+              'quantity': currentQuantity + quantity,
+              'lastUpdatedAt': FieldValue.serverTimestamp()
+            });
+            
+            print('Восстанавливаем количество для продукта $itemName: $currentQuantity -> ${currentQuantity + quantity}');
+          } else {
+            // Ищем по имени, если по ID не нашли
+            final querySnapshot = await _firestore
+                .collection('products')
+                .where('name', isEqualTo: itemName)
+                .limit(1)
+                .get();
+                
+            if (querySnapshot.docs.isNotEmpty) {
+              final doc = querySnapshot.docs.first;
+              final data = doc.data();
+              final currentQuantity = data['quantity'] as int? ?? 0;
+              
+              // Обновляем количество товара в главной коллекции по имени
+              batch.update(doc.reference, {
+                'quantity': currentQuantity + quantity,
+                'lastUpdatedAt': FieldValue.serverTimestamp()
+              });
+              
+              print('Восстановлено количество для продукта $itemName (найден по имени): ${currentQuantity + quantity}');
+            }
+          }
+        } catch (e) {
+          print('Ошибка при восстановлении товара: $e');
+        }
+      }
+      
+      // Применяем все изменения
+      await batch.commit();
+      print('Успешно восстановлено количество товаров для заказа $orderId');
+    } catch (e) {
+      print('Ошибка при восстановлении количества товаров: $e');
+      throw Exception('Не удалось восстановить количество товаров: $e');
+    }
+  }
+
   // Удаление заказа (перемещение в историю)
   Future<void> deleteOrder(String orderId) async {
     User? user = _auth.currentUser;
@@ -1156,6 +1309,9 @@ class OrderService {
         
         // Вычитаем количество товаров в базе данных, как при создании заказа
         await updateProductQuantities(orderItems);
+        
+        // Уведомляем об обновлении товаров, чтобы обновить главный экран
+        ProductUpdateNotifier().notifyProductsUpdated();
       }
 
       print('Заказ успешно восстановлен из истории с новым статусом: $orderId');
@@ -1164,170 +1320,4 @@ class OrderService {
       throw e;
     }
   }
-
-  // Метод для обновления количества товаров в базе данных после оформления заказа
-  Future<void> updateProductQuantities(List<OrderItem> items) async {
-    try {
-      print('Начинаем обновление количества товаров после оформления заказа');
-      final batch = _firestore.batch();
-      
-      for (var item in items) {
-        // Находим продукт в коллекции products по его id
-        final productRef = _firestore.collection('products').doc(item.id);
-        
-        // Получаем текущие данные продукта
-        final productDoc = await productRef.get();
-        if (productDoc.exists) {
-          final productData = productDoc.data() as Map<String, dynamic>;
-          final currentQuantity = productData['quantity'] as int? ?? 0;
-          
-          // Проверяем, что у нас есть достаточное количество товара
-          if (currentQuantity >= item.quantity) {
-            // Уменьшаем количество на основе количества в заказе
-            final newQuantity = currentQuantity - item.quantity;
-            
-            // Добавляем операцию в batch
-            batch.update(productRef, {
-              'quantity': newQuantity,
-              'lastUpdatedAt': FieldValue.serverTimestamp(),
-            });
-            
-            print('Обновляем количество для продукта ${item.id}: $currentQuantity -> $newQuantity');
-          } else {
-            print('Предупреждение: Недостаточно товара ${item.id} в наличии. Требуется: ${item.quantity}, В наличии: $currentQuantity');
-          }
-        } else {
-          // Если продукт не найден по ID, пытаемся найти его по имени
-          print('Продукт с ID ${item.id} не найден напрямую, пытаемся найти по имени');
-          
-          try {
-            // Выполняем запрос к коллекции products, ищем документ по имени
-            final querySnapshot = await _firestore
-                .collection('products')
-                .where('name', isEqualTo: item.name)
-                .limit(1)
-                .get();
-            
-            if (querySnapshot.docs.isNotEmpty) {
-              final productDoc = querySnapshot.docs.first;
-              final productData = productDoc.data();
-              final currentQuantity = productData['quantity'] as int? ?? 0;
-              
-              if (currentQuantity >= item.quantity) {
-                final newQuantity = currentQuantity - item.quantity;
-                
-                batch.update(productDoc.reference, {
-                  'quantity': newQuantity,
-                  'lastUpdatedAt': FieldValue.serverTimestamp(),
-                });
-                
-                print('Нашли и обновляем продукт по имени: ${item.name}. Количество: $currentQuantity -> $newQuantity');
-              } else {
-                print('Предупреждение: Недостаточно товара ${item.name} в наличии. Требуется: ${item.quantity}, В наличии: $currentQuantity');
-              }
-            } else {
-              print('Предупреждение: Продукт "${item.name}" не найден в базе данных ни по ID, ни по имени');
-            }
-          } catch (e) {
-            print('Ошибка при поиске продукта по имени: $e');
-          }
-        }
-      }
-      
-      // Выполняем все операции обновления атомарно
-      await batch.commit();
-      print('Успешно обновлено количество товаров в БД');
-    } catch (e) {
-      print('Ошибка при обновлении количества товаров: $e');
-      // Не пробрасываем ошибку, чтобы не нарушить основной процесс заказа
-    }
-  }
-
-  // Метод для восстановления количества товаров при отмене заказа
-  Future<void> restoreProductQuantities(String orderId) async {
-    try {
-      print('Начинаем восстановление количества товаров для отмененного заказа: $orderId');
-      
-      // Получаем данные заказа
-      final orderDoc = await _ordersCollection.doc(orderId).get();
-      if (!orderDoc.exists) {
-        throw Exception('Заказ не найден');
-      }
-      
-      final orderData = orderDoc.data() as Map<String, dynamic>;
-      final items = orderData['items'] as List<dynamic>? ?? [];
-      
-      if (items.isEmpty) {
-        print('Заказ не содержит товаров для восстановления');
-        return;
-      }
-      
-      final batch = _firestore.batch();
-      
-      for (var item in items) {
-        final Map<String, dynamic> itemData = item as Map<String, dynamic>;
-        final String itemId = itemData['id'] as String? ?? '';
-        final int quantity = itemData['quantity'] as int? ?? 0;
-        final String itemName = itemData['name'] as String? ?? '';
-        
-        if (itemId.isEmpty || quantity <= 0) {
-          print('Пропускаем товар с некорректными данными: $itemData');
-          continue;
-        }
-        
-        // Пытаемся найти продукт по ID
-        try {
-          final productRef = _firestore.collection('products').doc(itemId);
-          final productDoc = await productRef.get();
-          
-          if (productDoc.exists) {
-            final productData = productDoc.data() as Map<String, dynamic>;
-            final int currentQuantity = productData['quantity'] as int? ?? 0;
-            
-            // Увеличиваем количество товара на количество из заказа
-            batch.update(productRef, {
-              'quantity': currentQuantity + quantity,
-              'lastUpdatedAt': FieldValue.serverTimestamp(),
-            });
-            
-            print('Восстанавливаем количество для продукта $itemId: $currentQuantity -> ${currentQuantity + quantity}');
-          } else {
-            // Если продукт не найден по ID, ищем по имени
-            print('Продукт с ID $itemId не найден напрямую, пытаемся найти по имени');
-            
-            final querySnapshot = await _firestore
-                .collection('products')
-                .where('name', isEqualTo: itemName)
-                .limit(1)
-                .get();
-            
-            if (querySnapshot.docs.isNotEmpty) {
-              final productDoc = querySnapshot.docs.first;
-              final productData = productDoc.data();
-              final int currentQuantity = productData['quantity'] as int? ?? 0;
-              
-              batch.update(productDoc.reference, {
-                'quantity': currentQuantity + quantity,
-                'lastUpdatedAt': FieldValue.serverTimestamp(),
-              });
-              
-              print('Нашли и восстанавливаем продукт по имени: $itemName. Количество: $currentQuantity -> ${currentQuantity + quantity}');
-            } else {
-              print('Предупреждение: Продукт "$itemName" не найден в базе данных ни по ID, ни по имени');
-            }
-          }
-        } catch (e) {
-          print('Ошибка при восстановлении количества товара $itemId: $e');
-          // Продолжаем обработку остальных товаров
-        }
-      }
-      
-      // Выполняем все операции обновления атомарно
-      await batch.commit();
-      print('Успешно восстановлено количество товаров для заказа $orderId');
-    } catch (e) {
-      print('Ошибка при восстановлении количества товаров: $e');
-      // Не пробрасываем ошибку, чтобы не нарушить основной процесс отмены заказа
-    }
-  }
-} 
+}

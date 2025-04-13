@@ -867,6 +867,9 @@ class _HistoryTabState extends State<HistoryTab> {
             backgroundColor: Colors.green,
           ),
         );
+        
+        // Переходим на главную страницу, чтобы пользователь сразу увидел обновленный список товаров
+        Navigator.of(context).pushNamedAndRemoveUntil('/main', (route) => false, arguments: {'initialTab': 0});
       }
     } catch (e) {
       // Безопасно закрываем индикатор загрузки в случае ошибки
