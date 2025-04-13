@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:ararat/services/order_service.dart';
+import 'package:ararat/services/payment_service.dart';
 import 'package:intl/intl.dart';
 import 'package:ararat/widgets/checkout_form.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'dart:async';
+import 'package:url_launcher/url_launcher.dart';
 
 // Вынесли классы OrderCard и _OrderCardState на верхний уровень файла
 class OrderCard extends StatefulWidget {
@@ -20,6 +24,16 @@ class OrderCard extends StatefulWidget {
 
 class _OrderCardState extends State<OrderCard> {
   bool isExpanded = false;
+  final PaymentService _paymentService = PaymentService();
+  bool _isProcessingPayment = false;
+  Timer? _paymentCheckTimer;
+  String? _currentPaymentId;
+  
+  @override
+  void dispose() {
+    _paymentCheckTimer?.cancel();
+    super.dispose();
+  }
   
   @override
   Widget build(BuildContext context) {
@@ -372,13 +386,13 @@ class _OrderCardState extends State<OrderCard> {
                   ),
                   
                   // Кнопки действий
-                  if (isQrPayment)
+                  if (isQrPayment && (widget.order.status.toLowerCase() == 'новый' || widget.order.status.toLowerCase() == 'в обработке'))
                     _buildActionButton(
                       icon: Icons.qr_code_scanner,
                       label: 'Оплатить QR-кодом',
-                      onPressed: () {
-                        // Действие для оплаты QR-кодом
-                      },
+                      onPressed: _isProcessingPayment 
+                          ? null 
+                          : () => _showQrPaymentDialog(context, widget.order),
                       isPrimary: true,
                     )
                   else if (isCashOnDelivery)
@@ -418,6 +432,352 @@ class _OrderCardState extends State<OrderCard> {
         ),
       ),
     );
+  }
+  
+  // Метод для отображения QR-кода оплаты
+  void _showQrPaymentDialog(BuildContext context, Order order) async {
+    setState(() => _isProcessingPayment = true);
+    
+    try {
+      // Создаем запись о платеже и получаем QR-код
+      final paymentData = await _paymentService.createPayment(
+        orderId: order.id,
+        amount: order.total,
+        paymentMethod: 'qr',
+      );
+      
+      final String paymentId = paymentData['paymentId'];
+      final String qrData = paymentData['qrData'];
+      
+      // Сохраняем текущий ID платежа
+      _currentPaymentId = paymentId;
+      
+      // Показываем диалог с QR-кодом
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => WillPopScope(
+            onWillPop: () async {
+              // При закрытии диалога отменяем таймер проверки
+              _paymentCheckTimer?.cancel();
+              return true;
+            },
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text(
+                'Оплата QR-кодом',
+                style: TextStyle(
+                  color: Color(0xFF50321B),
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Отсканируйте QR-код через приложение банка для оплаты заказа',
+                    style: TextStyle(
+                      color: Color(0xFF50321B),
+                      fontFamily: 'Inter',
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: 220,
+                    height: 220,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF6C4425).withOpacity(0.2),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 5,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: QrImageView(
+                      data: qrData,
+                      version: QrVersions.auto,
+                      size: 200,
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF6C4425),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Сумма к оплате: ${order.total.toStringAsFixed(0)} ₽',
+                    style: const TextStyle(
+                      color: Color(0xFF50321B),
+                      fontFamily: 'Inter',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: () async {
+                      // Скопировать реквизиты для ручного ввода или открыть приложение банка
+                      final Uri url = Uri.parse('https://qr.nspk.ru/');
+                      try {
+                        // Избегаем использования canLaunchUrl, которое вызывает ошибку
+                        await launchUrl(
+                          url, 
+                          mode: LaunchMode.externalApplication
+                        ).catchError((error) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Не удалось открыть приложение банка: $error'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        });
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Не удалось открыть приложение банка: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.open_in_new, size: 14),
+                    label: const Text('Открыть приложение банка'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF6C4425),
+                      textStyle: const TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                      ),
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _paymentCheckTimer?.cancel();
+                    Navigator.pop(context);
+                    setState(() => _isProcessingPayment = false);
+                  },
+                  child: const Text(
+                    'Отмена',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    // Добавляем индикатор загрузки при проверке статуса
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => WillPopScope(
+                        onWillPop: () async => false,
+                        child: const Dialog(
+                          child: Padding(
+                            padding: EdgeInsets.all(20.0),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(),
+                                SizedBox(width: 20),
+                                Text('Проверяем статус оплаты...'),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                    
+                    // Теперь безопасно проверяем статус с таймаутом
+                    _checkPaymentStatus(paymentId).then((_) {
+                      // Закрываем диалог индикатора загрузки, если он еще открыт
+                      if (mounted && Navigator.canPop(context)) {
+                        Navigator.of(context).pop();
+                      }
+                    }).catchError((error) {
+                      // Закрываем диалог индикатора загрузки при ошибке
+                      if (mounted && Navigator.canPop(context)) {
+                        Navigator.of(context).pop();
+                      }
+                      
+                      // Показываем сообщение об ошибке
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Ошибка при проверке статуса: $error'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    });
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6C4425),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Я оплатил',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        
+        // Запускаем таймер для периодической проверки статуса платежа
+        _startPaymentStatusChecking(paymentId);
+      }
+    } catch (e) {
+      print('Ошибка при создании QR-кода: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при создании QR-кода: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _isProcessingPayment = false);
+      }
+    }
+  }
+  
+  // Метод для запуска периодической проверки статуса платежа
+  void _startPaymentStatusChecking(String paymentId) {
+    // Отменяем предыдущий таймер, если он был
+    _paymentCheckTimer?.cancel();
+    
+    // Запускаем новый таймер, который будет проверять статус каждые 5 секунд
+    _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      _checkPaymentStatus(paymentId);
+    });
+  }
+  
+  // Метод для проверки статуса платежа с таймаутом
+  Future<void> _checkPaymentStatus(String paymentId) async {
+    // Добавляем таймаут для всей операции
+    try {
+      // Создаем отдельный таймер для ограничения времени ожидания
+      final timeoutCompleter = Completer<String>();
+      final statusCompleter = Completer<String>();
+      
+      // Запускаем таймер на 5 секунд
+      Timer(Duration(seconds: 10), () {
+        if (!timeoutCompleter.isCompleted) {
+          timeoutCompleter.complete('timeout');
+        }
+      });
+      
+      // Запускаем запрос статуса
+      _paymentService.checkPaymentStatus(paymentId).then((status) {
+        if (!statusCompleter.isCompleted) {
+          statusCompleter.complete(status);
+        }
+      }).catchError((error) {
+        if (!statusCompleter.isCompleted) {
+          statusCompleter.completeError(error);
+        }
+      });
+      
+      // Ожидаем любой из результатов - таймаут или статус
+      final firstResult = await Future.any([
+        timeoutCompleter.future,
+        statusCompleter.future,
+      ]);
+      
+      // Проверяем, какой результат мы получили
+      if (firstResult == 'timeout') {
+        throw Exception('Превышено время ожидания при проверке статуса платежа');
+      }
+      
+      final status = firstResult;
+      
+      if (status == 'completed') {
+        // Платеж успешен
+        _paymentCheckTimer?.cancel();
+        
+        // Закрываем диалог, если он открыт
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+        
+        // Показываем уведомление об успешной оплате
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Оплата успешно выполнена!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          
+          // Обновляем UI
+          setState(() {
+            _isProcessingPayment = false;
+          });
+        }
+      } else if (status == 'failed') {
+        // Платеж не удался
+        _paymentCheckTimer?.cancel();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ошибка при оплате. Попробуйте еще раз.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          setState(() => _isProcessingPayment = false);
+        }
+      } else {
+        // Статус все еще 'pending' или другой
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Статус платежа: $status. Мы уведомим вас при изменении.'),
+            ),
+          );
+          // Обновляем интерфейс
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      print('Ошибка при проверке статуса платежа: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка при проверке статуса: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() => _isProcessingPayment = false);
+      }
+      rethrow; // Пробрасываем ошибку дальше для обработки
+    }
   }
   
   // Вспомогательные методы
@@ -609,7 +969,7 @@ class _OrderCardState extends State<OrderCard> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     required bool isPrimary,
     bool isCancel = false,
   }) {
