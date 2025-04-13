@@ -236,13 +236,38 @@ class _OrderCardState extends State<OrderCard> {
                     ],
                   ),
                   
-                  // Горизонтальный список превью товаров, видимый всегда
-                  SizedBox(
-                    height: 70,
+                  // Горизонтальный список изображений товаров (когда свернуто)
+                  Container(
+                    margin: const EdgeInsets.only(top: 6, bottom: 2),
+                    height: 46,
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      itemCount: widget.order.items.length > 4 ? 4 : widget.order.items.length,
+                      itemCount: widget.order.items.length > 4 ? 5 : widget.order.items.length,
                       itemBuilder: (context, index) {
+                        // Показываем индикатор "+еще X" если товаров больше 4
+                        if (widget.order.items.length > 4 && index == 4) {
+                          return Container(
+                            width: 46,
+                            height: 46,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF6C4425).withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '+${widget.order.items.length - 4}',
+                                style: const TextStyle(
+                                  color: Color(0xFF6C4425),
+                                  fontFamily: 'Inter',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        
                         final dynamic item = widget.order.items[index];
                         String? imageUrl;
                         
@@ -262,247 +287,130 @@ class _OrderCardState extends State<OrderCard> {
                           imageUrl = item.imageUrl;
                         }
                         
-                        // Если это последний элемент и есть еще товары, показываем "+N"
-                        if (index == 3 && widget.order.items.length > 4) {
-                          return Stack(
-                            children: [
-                              Container(
-                                width: 70,
-                                height: 70,
-                                margin: const EdgeInsets.only(right: 8),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  image: imageUrl != null
-                                      ? DecorationImage(
-                                          image: NetworkImage(imageUrl.startsWith('http')
-                                              ? imageUrl
-                                              : 'https://storage.googleapis.com/ararat-80efa.appspot.com/$imageUrl'),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
-                                  color: Colors.grey.shade200,
-                                ),
-                              ),
-                              Container(
-                                width: 70,
-                                height: 70,
-                                margin: const EdgeInsets.only(right: 8),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  color: Colors.black.withOpacity(0.5),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '+${widget.order.items.length - 3}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontFamily: 'Inter',
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        }
-                        
                         return Container(
-                          width: 70,
-                          height: 70,
+                          width: 46,
+                          height: 46,
                           margin: const EdgeInsets.only(right: 8),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(8),
-                            image: imageUrl != null
-                                ? DecorationImage(
-                                    image: NetworkImage(imageUrl.startsWith('http')
-                                        ? imageUrl
-                                        : 'https://storage.googleapis.com/ararat-80efa.appspot.com/$imageUrl'),
-                                    fit: BoxFit.cover,
-                                  )
-                                : null,
-                            color: Colors.grey.shade200,
+                            color: Colors.grey[200],
                           ),
-                          child: imageUrl == null
-                              ? const Center(
-                                  child: Icon(
-                                    Icons.image_not_supported,
-                                    color: Colors.grey,
-                                    size: 24,
-                                  ),
-                                )
-                              : null,
+                          clipBehavior: Clip.antiAlias,
+                          child: imageUrl != null && imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl.startsWith('http')
+                                    ? imageUrl
+                                    : 'https://storage.googleapis.com/ararat-80efa.appspot.com/$imageUrl',
+                                fit: BoxFit.cover,
+                                errorBuilder: (ctx, obj, trace) => const Center(
+                                  child: Icon(Icons.image_not_supported, size: 14, color: Colors.grey),
+                                ),
+                              )
+                            : const Center(
+                                child: Icon(Icons.image_not_supported, size: 14, color: Colors.grey),
+                              ),
                         );
                       },
                     ),
                   ),
                   
-                  // Развернутый список товаров
+                  // Вертикальный список товаров с ценами и названиями (когда развернуто)
                   if (isExpanded)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.only(top: 8),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Divider(),
-                          ...widget.order.items.map((dynamic item) {
-                            String name = 'Неизвестный товар';
-                            double price = 0;
-                            int quantity = 1;
-                            
-                            // Если это Map (из Firebase), извлекаем данные
-                            if (item is Map<String, dynamic>) {
-                              name = item['name'] as String? ?? 
-                                    (item['product'] is Map ? (item['product'] as Map)['name'] as String? ?? 'Неизвестный товар' : 'Неизвестный товар');
-                              
-                              price = (item['price'] != null) ? (item['price'] as num).toDouble() : 0;
-                              quantity = (item['quantity'] != null) ? (item['quantity'] as num).toInt() : 1;
-                            } 
-                            // Если это OrderItem
-                            else if (item is OrderItem) {
-                              name = item.name;
-                              price = item.price;
-                              quantity = item.quantity;
-                            }
-                            
-                            final totalPrice = (price * quantity).toStringAsFixed(0);
-                            
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      name,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Color(0xFF50321B),
-                                        fontFamily: 'Inter',
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        '$quantity шт.',
-                                        style: const TextStyle(
-                                          color: Color(0xFF6C4425),
-                                          fontFamily: 'Inter',
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        '$totalPrice ₽',
-                                        style: const TextStyle(
-                                          color: Color(0xFF6C4425),
-                                          fontFamily: 'Inter',
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                          const Divider(),
-                          
-                          // Сумма заказа
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text(
-                                  'Итого:',
-                                  style: TextStyle(
-                                    color: Color(0xFF50321B),
-                                    fontFamily: 'Inter',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  '${widget.order.total.toStringAsFixed(0)} ₽',
-                                  style: const TextStyle(
-                                    color: Color(0xFF6C4425),
-                                    fontFamily: 'Inter',
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                        children: widget.order.items.map((dynamic item) => _buildProductItem(item)).toList(),
                       ),
                     ),
                   
-                  // Кнопки действий
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
+                  // Сумма заказа (выделенная) - ПОД ТОВАРАМИ
+                  Container(
+                    margin: const EdgeInsets.only(top: 10, bottom: 10),
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF2ECE4),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF6C4425).withOpacity(0.15),
+                        width: 1,
+                      ),
+                    ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Кнопка оплаты для QR-кода
-                        if (isQrPayment && (widget.order.status.toLowerCase() == 'новый' || widget.order.status.toLowerCase() == 'в обработке'))
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              // Действие для оплаты
-                            },
-                            icon: const Icon(Icons.qr_code, size: 16),
-                            label: const Text('Оплатить'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF6C4425),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              textStyle: const TextStyle(
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.monetization_on,
+                              size: 14,
+                              color: Color(0xFF6C4425),
+                            ),
+                            const SizedBox(width: 4),
+                            const Text(
+                              'Сумма заказа:',
+                              style: TextStyle(
+                                color: Color(0xFF50321B),
                                 fontFamily: 'Inter',
-                                fontSize: 12,
+                                fontSize: 13,
                                 fontWeight: FontWeight.bold,
                               ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              minimumSize: const Size(100, 32),
                             ),
+                          ],
+                        ),
+                        Text(
+                          '${widget.order.total.toStringAsFixed(0)} ₽',
+                          style: const TextStyle(
+                            color: Color(0xFF6C4425),
+                            fontFamily: 'Inter',
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
                           ),
-                        
-                        // Кнопка отмены заказа
-                        if (canCancel)
-                          Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: OutlinedButton(
-                              onPressed: () {
-                                // Действие для отмены заказа
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.red,
-                                side: const BorderSide(color: Colors.red),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                textStyle: const TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                minimumSize: const Size(100, 32),
-                              ),
-                              child: const Text('Отменить'),
-                            ),
-                          ),
+                        ),
                       ],
                     ),
                   ),
+                  
+                  // Кнопки действий
+                  if (isQrPayment)
+                    _buildActionButton(
+                      icon: Icons.qr_code_scanner,
+                      label: 'Оплатить QR-кодом',
+                      onPressed: () {
+                        // Действие для оплаты QR-кодом
+                      },
+                      isPrimary: true,
+                    )
+                  else if (isCashOnDelivery)
+                    _buildCashPaymentInfo(),
+                  
+                  // Кнопка отмены заказа
+                  if (canCancel)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: TextButton(
+                          onPressed: () {
+                            // Действие для отмены заказа
+                          },
+                          child: const Text(
+                            'Отменить заказ',
+                            style: TextStyle(
+                              color: Color(0xFF9E9E9E),
+                              fontFamily: 'Inter',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            minimumSize: Size.zero,
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -511,9 +419,9 @@ class _OrderCardState extends State<OrderCard> {
       ),
     );
   }
-
-  // Вспомогательный метод для строки информации
-  Widget _buildCompactInfoRow(IconData icon, String label, String value) {
+  
+  // Вспомогательные методы
+  Widget _buildCompactInfoRow(IconData icon, String title, String value, {Color? valueColor}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -527,25 +435,216 @@ class _OrderCardState extends State<OrderCard> {
           child: RichText(
             text: TextSpan(
               style: const TextStyle(
+                color: Color(0xFF50321B),
                 fontFamily: 'Inter',
                 fontSize: 13,
-                color: Color(0xFF50321B),
               ),
               children: [
                 TextSpan(
-                  text: label + ' ',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                  ),
+                  text: '$title ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 TextSpan(
                   text: value,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontWeight: valueColor != null ? FontWeight.bold : FontWeight.normal,
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+  
+  // Метод для создания элемента товара
+  Widget _buildProductItem(dynamic item) {
+    String name = 'Неизвестный товар';
+    double price = 0;
+    int quantity = 1;
+    String? imageUrl;
+    
+    // Если это Map (из Firebase), извлекаем данные
+    if (item is Map<String, dynamic>) {
+      name = item['name'] as String? ?? 
+            (item['product'] is Map ? (item['product'] as Map)['name'] as String? ?? 'Неизвестный товар' : 'Неизвестный товар');
+      
+      price = (item['price'] != null) ? (item['price'] as num).toDouble() : 0;
+      quantity = (item['quantity'] != null) ? (item['quantity'] as num).toInt() : 1;
+      imageUrl = item['imageUrl'] as String?;
+      
+      if (imageUrl == null && item['product'] is Map && (item['product'] as Map)['imageUrls'] is List) {
+        final imageUrls = List<String>.from((item['product'] as Map)['imageUrls'] as List);
+        if (imageUrls.isNotEmpty) {
+          imageUrl = imageUrls.first;
+        }
+      }
+    } 
+    // Если это OrderItem
+    else if (item is OrderItem) {
+      name = item.name;
+      price = item.price;
+      quantity = item.quantity;
+      imageUrl = item.imageUrl;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          // Изображение товара
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              color: Colors.grey[200],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: imageUrl != null && imageUrl.isNotEmpty
+              ? Image.network(
+                  imageUrl.startsWith('http')
+                      ? imageUrl
+                      : 'https://storage.googleapis.com/ararat-80efa.appspot.com/$imageUrl',
+                  fit: BoxFit.cover,
+                  errorBuilder: (ctx, obj, trace) => const Center(
+                    child: Icon(Icons.image_not_supported, size: 14, color: Colors.grey),
+                  ),
+                )
+              : const Center(
+                  child: Icon(Icons.image_not_supported, size: 14, color: Colors.grey),
+                ),
+          ),
+          const SizedBox(width: 8),
+          
+          // Название и цена товара
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Color(0xFF50321B),
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '$quantity × ${price.toStringAsFixed(0)} ₽',
+                  style: const TextStyle(
+                    color: Colors.grey,
+                    fontFamily: 'Inter',
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // Стоимость товара
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFF6C4425).withOpacity(0.08),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '${(price * quantity).toStringAsFixed(0)} ₽',
+              style: const TextStyle(
+                color: Color(0xFF6C4425),
+                fontFamily: 'Inter',
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Метод для создания информации о наличной оплате
+  Widget _buildCashPaymentInfo() {
+    return Container(
+      width: double.infinity,
+      height: 36,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF2ECE4),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: const Color(0xFF6C4425).withOpacity(0.15),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.payments,
+            size: 16,
+            color: Color(0xFF6C4425),
+          ),
+          const SizedBox(width: 6),
+          const Text(
+            'Оплата при получении',
+            style: TextStyle(
+              color: Color(0xFF6C4425),
+              fontFamily: 'Inter',
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Метод для создания кнопки действия
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+    required bool isPrimary,
+    bool isCancel = false,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 36,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 16),
+        label: Text(label),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isPrimary 
+              ? const Color(0xFF6C4425) 
+              : isCancel
+                  ? Colors.white
+                  : const Color(0xFFF2ECE4),
+          foregroundColor: isPrimary 
+              ? Colors.white 
+              : isCancel
+                  ? Colors.red
+                  : const Color(0xFF6C4425),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: isCancel 
+                  ? Colors.red.withOpacity(0.3) 
+                  : isPrimary
+                      ? Colors.transparent
+                      : const Color(0xFF6C4425).withOpacity(0.15),
+            ),
+          ),
+          elevation: 0,
+          padding: EdgeInsets.zero,
+        ),
+      ),
     );
   }
 }
@@ -592,8 +691,20 @@ String _getDeliveryTypeInRussian(String type) {
     case 'delivery':
     case 'доставка':
       return 'Доставка';
+    case 'slow':
+      return 'Обычная доставка';
+    case 'fast':
+      return 'Быстрая доставка';
+    case 'standard':
+      return 'Стандартная доставка';
+    case 'scheduled':
+      return 'Доставка к определенному времени';
+    case 'express':
+      return 'Экспресс-доставка';
     default:
-      return type;
+      // Если неизвестный тип, выводим первую букву заглавной
+      if (type.isEmpty) return 'Не указано';
+      return type.substring(0, 1).toUpperCase() + type.substring(1);
   }
 }
 
