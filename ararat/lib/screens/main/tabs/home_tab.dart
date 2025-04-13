@@ -282,6 +282,13 @@ class CartManager {
     _saveCartToFirebase();
   }
   
+  // Новый метод для очистки корзины после успешного заказа
+  void clearCartAfterOrder() {
+    // Не восстанавливаем локальные количества - товары уже заказаны
+    cartNotifier.value = [];
+    _saveCartToFirebase();
+  }
+  
   void updateQuantity(String productName, int quantity) {
     final newList = List<Map<String, dynamic>>.from(cartProducts);
     int index = newList.indexWhere((item) => item['name'] == productName);

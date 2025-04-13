@@ -362,6 +362,9 @@ class OrderService {
         print('Обновлен профиль пользователя с новым заказом');
       }
 
+      // Обновляем количество товаров в базе данных
+      await updateProductQuantities(items);
+
       print('Заказ успешно создан: $orderId');
       return orderId;
     } catch (e) {
@@ -1002,6 +1005,51 @@ class OrderService {
     } catch (e) {
       print('Ошибка при восстановлении заказа из истории: $e');
       throw e;
+    }
+  }
+
+  // Метод для обновления количества товаров в базе данных после оформления заказа
+  Future<void> updateProductQuantities(List<OrderItem> items) async {
+    try {
+      print('Начинаем обновление количества товаров после оформления заказа');
+      final batch = _firestore.batch();
+      
+      for (var item in items) {
+        // Находим продукт в коллекции products по его id
+        final productRef = _firestore.collection('products').doc(item.id);
+        
+        // Получаем текущие данные продукта
+        final productDoc = await productRef.get();
+        if (productDoc.exists) {
+          final productData = productDoc.data() as Map<String, dynamic>;
+          final currentQuantity = productData['quantity'] as int? ?? 0;
+          
+          // Проверяем, что у нас есть достаточное количество товара
+          if (currentQuantity >= item.quantity) {
+            // Уменьшаем количество на основе количества в заказе
+            final newQuantity = currentQuantity - item.quantity;
+            
+            // Добавляем операцию в batch
+            batch.update(productRef, {
+              'quantity': newQuantity,
+              'lastUpdatedAt': FieldValue.serverTimestamp(),
+            });
+            
+            print('Обновляем количество для продукта ${item.id}: $currentQuantity -> $newQuantity');
+          } else {
+            print('Предупреждение: Недостаточно товара ${item.id} в наличии. Требуется: ${item.quantity}, В наличии: $currentQuantity');
+          }
+        } else {
+          print('Предупреждение: Продукт ${item.id} не найден в базе данных');
+        }
+      }
+      
+      // Выполняем все операции обновления атомарно
+      await batch.commit();
+      print('Успешно обновлено количество товаров в БД');
+    } catch (e) {
+      print('Ошибка при обновлении количества товаров: $e');
+      // Не пробрасываем ошибку, чтобы не нарушить основной процесс заказа
     }
   }
 } 

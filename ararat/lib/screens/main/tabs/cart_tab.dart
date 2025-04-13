@@ -845,8 +845,8 @@ class _CartTabState extends State<CartTab> with TickerProviderStateMixin {
         builder: (context) => CheckoutForm(
           orderItems: orderItems,
           onOrderCompleted: () {
-            // Очищаем корзину после успешного оформления заказа
-            _cartManager.clearCart();
+            // Очищаем корзину после успешного оформления заказа без восстановления локального количества
+            _cartManager.clearCartAfterOrder();
           },
         ),
       );
