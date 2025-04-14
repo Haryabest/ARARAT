@@ -17,6 +17,7 @@ class _ProductsTabState extends State<ProductsTab> {
   List<Map<String, dynamic>> _products = [];
   List<Map<String, dynamic>> _filteredProducts = [];
   List<Map<String, dynamic>> _categories = [];
+  List<String> _imageUrls = [];
   String? _selectedCategoryFilter;
   bool _isLoading = true;
   bool _isCategoriesLoading = true;
@@ -466,7 +467,7 @@ class _ProductsTabState extends State<ProductsTab> {
     _imageUrlController.clear();
     _ingredientsController.clear();
     _weightController.clear();
-    _selectedCategory = _categories.isNotEmpty ? _categories[0].name : '';
+    _selectedCategory = _categories.isNotEmpty ? _categories[0]['name'] as String : '';
 
     // Показываем модальный лист с формой
     showModalBottomSheet(

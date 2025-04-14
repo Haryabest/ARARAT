@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Подтверждение платежа</title>
+  <style>
+    body {
+      font-family: 'Roboto', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #4CAF50;
+      color: white;
+    }
+    .container {
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      padding: 30px;
+      max-width: 350px;
+      width: 100%;
+      text-align: center;
+      color: #333;
+    }
+    .logo {
+      font-size: 28px;
+      font-weight: bold;
+      color: #4CAF50;
+      margin-bottom: 20px;
+    }
+    h1 {
+      color: #4CAF50;
+      margin-bottom: 20px;
+      font-size: 22px;
+    }
+    p {
+      margin-bottom: 15px;
+      line-height: 1.5;
+    }
+    .status {
+      font-weight: bold;
+      font-size: 18px;
+      margin: 15px 0;
+    }
+    .success {
+      color: #4CAF50;
+    }
+    .error {
+      color: #F44336;
+    }
+    .processing {
+      color: #2196F3;
+    }
+    .spinner {
+      border: 4px solid rgba(76, 175, 80, 0.2);
+      border-radius: 50%;
+      border-top: 4px solid #4CAF50;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .progress {
+      height: 4px;
+      background-color: #f0f0f0;
+      border-radius: 2px;
+      margin: 15px 0;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0;
+      background-color: #4CAF50;
+      transition: width 3s linear;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">АРАРАТ</div>
+    <h1>Подтверждение платежа</h1>
+    
+    <div id="loading">
+      <p id="orderInfo"></p>
+      <p id="amountInfo"></p>
+      <div class="spinner"></div>
+      <p class="status processing" id="status">Автоматическое подтверждение...</p>
+      <div class="progress">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <p id="message">Пожалуйста, подождите. Платеж будет подтвержден автоматически.</p>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-firestore-compat.js"></script>
+
+  <script>
+    // Инициализация Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyDIBWXxwSnggA2ZJt9JbTnX8Og9d4kD5YI",
+      authDomain: "arara-efa6f.firebaseapp.com",
+      projectId: "arara-efa6f",
+      storageBucket: "arara-efa6f.appspot.com",
+      messagingSenderId: "301989351145",
+      appId: "1:301989351145:web:cf8dc2f6ff2b635efc2a78"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Получение параметров из URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentId = urlParams.get('paymentId');
+    const orderId = urlParams.get('orderId');
+    const amount = urlParams.get('amount');
+
+    // DOM элементы
+    const statusElement = document.getElementById('status');
+    const messageElement = document.getElementById('message');
+    const orderInfoElement = document.getElementById('orderInfo');
+    const amountInfoElement = document.getElementById('amountInfo');
+    const progressBar = document.getElementById('progressBar');
+
+    // Запуск прогресс-бара
+    progressBar.style.width = '100%';
+
+    // Функция для автоматического закрытия окна
+    function closeWindow() {
+      setTimeout(() => {
+        window.close();
+      }, 1000);
+    }
+
+    // Главная функция обработки платежа
+    async function processPayment() {
+      try {
+        // Базовая информация о платеже
+        if (orderInfoElement) orderInfoElement.textContent = `Заказ №${orderId}`;
+        if (amountInfoElement) amountInfoElement.textContent = `Сумма: ${amount} ₽`;
+
+        console.log("Начинаем обработку платежа", {paymentId, orderId, amount});
+        
+        // Шаг 1: Отметить QR как отсканированный
+        console.log("Шаг 1: Отмечаем QR как отсканированный");
+        await db.collection('payments').doc(paymentId).update({
+          isScanned: true,
+          scanTime: firebase.firestore.FieldValue.serverTimestamp(),
+          status: 'processing',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log("QR-код отмечен как отсканированный");
+        
+        // Задержка перед следующим шагом
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Шаг 2: Установить статус платежа как 'completed'
+        console.log("Шаг 2: Устанавливаем статус платежа как completed");
+        await db.collection('payments').doc(paymentId).update({
+          status: 'completed',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log("Статус платежа обновлен на completed");
+        
+        // Задержка перед следующим шагом
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Шаг 3: Обновить статус заказа
+        console.log("Шаг 3: Обновляем статус заказа");
+        await db.collection('orders').doc(orderId).update({
+          status: 'оплачен',
+          paymentStatus: 'completed',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log("Статус заказа обновлен на оплачен");
+        
+        // Показываем успешное завершение
+        statusElement.textContent = "Платеж подтвержден!";
+        statusElement.className = "status success";
+        messageElement.textContent = "Заказ успешно оплачен. Страница закроется автоматически.";
+        
+        // Автоматическое закрытие окна
+        closeWindow();
+        
+      } catch (error) {
+        console.error("Ошибка при обработке платежа:", error);
+        statusElement.textContent = "Ошибка";
+        statusElement.className = "status error";
+        messageElement.textContent = `Произошла ошибка: ${error.message}`;
+        
+        // Повторная попытка обновления
+        try {
+          console.log("Выполняем повторную попытку обновления...");
+          
+          // Последняя попытка обновить статус
+          await db.collection('payments').doc(paymentId).update({
+            status: 'completed'
+          });
+          
+          await db.collection('orders').doc(orderId).update({
+            status: 'оплачен',
+            paymentStatus: 'completed'
+          });
+          
+          statusElement.textContent = "Платеж подтвержден!";
+          statusElement.className = "status success";
+          messageElement.textContent = "Заказ успешно оплачен после повторной попытки. Страница закроется автоматически.";
+          
+          // Автоматическое закрытие окна
+          closeWindow();
+        } catch (retryError) {
+          console.error("Ошибка при повторной попытке:", retryError);
+        }
+      }
+    }
+
+    // Запуск обработки после загрузки страницы
+    window.onload = function() {
+      // Проверяем наличие необходимых параметров
+      if (!paymentId || !orderId || !amount) {
+        statusElement.textContent = "Ошибка";
+        statusElement.className = "status error";
+        messageElement.textContent = "Неверная ссылка платежа. Отсутствуют необходимые параметры.";
+        return;
+      }
+      
+      // Запускаем таймер и обработку платежа
+      setTimeout(() => {
+        processPayment();
+      }, 500);
+    };
+  </script>
+</body>
+</html> 

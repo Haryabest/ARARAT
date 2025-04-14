@@ -12,10 +12,33 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == userId;
     }
     
+    // Разрешаем доступ к коллекции payments для обработки платежей по QR-коду
+    match /payments/{paymentId} {
+      // Любой может читать платеж для проверки
+      allow read: if true;
+      
+      // Разрешаем обновлять статус платежа с веб-страницы
+      allow update: if 
+        // Проверяем, что меняются только определенные поля
+        request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'updatedAt', 'isScanned', 'scanTime']) &&
+        // Проверяем, что orderId и userId не меняются
+        request.resource.data.orderId == resource.data.orderId &&
+        request.resource.data.userId == resource.data.userId &&
+        // Проверяем, что amount не меняется
+        request.resource.data.amount == resource.data.amount;
+    }
+    
     // Разрешаем доступ к коллекции orders
     match /orders/{orderId} {
+      // Разрешаем чтение всем аутентифицированным пользователям
       allow read: if request.auth != null;
-      allow write: if isAdmin() || isOwner(resource.data.userId);
+      
+      // Разрешаем обновление для обработки платежей
+      allow update: if 
+        // Проверяем, что меняются только статусы
+        request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'paymentStatus', 'updatedAt', 'paymentId']);
     }
     
     // Разрешаем доступ пользователям к своим документам

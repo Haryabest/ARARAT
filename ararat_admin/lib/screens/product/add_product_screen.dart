@@ -61,7 +61,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
           description: _descriptionController.text,
           price: double.parse(_priceController.text),
           category: _selectedCategory,
-          imageUrls: [],
+          imageUrls: _imageUrls,
+          weight: '1 кг',
         );
 
         await _productService.addProduct(product, _imageUrls);

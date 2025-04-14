@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Подтверждение платежа</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+    }
+    .payment-card {
+      background-color: white;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      padding: 30px;
+      max-width: 400px;
+      width: 100%;
+    }
+    .status {
+      font-size: 24px;
+      margin-bottom: 20px;
+      font-weight: bold;
+    }
+    .status.success { color: green; }
+    .status.error { color: red; }
+    .status.processing { color: orange; }
+    .logo {
+      margin-bottom: 20px;
+      font-size: 28px;
+      font-weight: bold;
+      color: #663300;
+    }
+    .message {
+      margin-bottom: 20px;
+      color: #555;
+    }
+    .button {
+      background-color: #663300;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s;
+    }
+    .button:hover {
+      background-color: #8B4513;
+    }
+    .spinner {
+      border: 4px solid rgba(0, 0, 0, 0.1);
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border-left-color: #663300;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="payment-card">
+    <div class="logo">АРАРАТ</div>
+    <div id="status" class="status processing">Обработка...</div>
+    <div id="spinner" class="spinner"></div>
+    <div id="message" class="message">Подождите, платеж обрабатывается...</div>
+    <p>Вы можете закрыть эту страницу и вернуться в приложение.</p>
+    <button class="button" onclick="window.close()">Закрыть</button>
+  </div>
+
+  <script>
+    // Инициализация Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyDIBWXxwSnggA2ZJt9JbTnX8Og9d4kD5YI",
+      authDomain: "ararat-80efa.firebaseapp.com",
+      projectId: "ararat-80efa",
+      storageBucket: "ararat-80efa.appspot.com",
+      messagingSenderId: "301989351145",
+      appId: "1:301989351145:web:cf8dc2f6ff2b635efc2a78"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Получаем параметры из URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentId = urlParams.get('paymentId');
+    const orderId = urlParams.get('orderId');
+    const amount = parseFloat(urlParams.get('amount'));
+
+    const statusEl = document.getElementById('status');
+    const messageEl = document.getElementById('message');
+    const spinnerEl = document.getElementById('spinner');
+
+    // Проверяем параметры
+    if (!paymentId || !orderId || isNaN(amount)) {
+      statusEl.textContent = 'Ошибка';
+      statusEl.className = 'status error';
+      messageEl.textContent = 'Неверные параметры платежа';
+      spinnerEl.style.display = 'none';
+      console.error('Invalid parameters');
+      return;
+    }
+
+    // Обработка платежа
+    async function processPayment() {
+      try {
+        // Проверяем существует ли платеж
+        const paymentRef = db.collection('payments').doc(paymentId);
+        const paymentDoc = await paymentRef.get();
+
+        if (!paymentDoc.exists) {
+          statusEl.textContent = 'Ошибка';
+          statusEl.className = 'status error';
+          messageEl.textContent = 'Платеж не найден';
+          spinnerEl.style.display = 'none';
+          return;
+        }
+
+        const paymentData = paymentDoc.data();
+
+        // Проверяем данные платежа
+        if (paymentData.orderId !== orderId) {
+          statusEl.textContent = 'Ошибка';
+          statusEl.className = 'status error';
+          messageEl.textContent = 'Несоответствие данных платежа';
+          spinnerEl.style.display = 'none';
+          return;
+        }
+
+        if (Math.abs(paymentData.amount - amount) > 0.01) {
+          statusEl.textContent = 'Ошибка';
+          statusEl.className = 'status error';
+          messageEl.textContent = 'Несоответствие суммы платежа';
+          spinnerEl.style.display = 'none';
+          return;
+        }
+
+        // Если платеж уже обработан
+        if (paymentData.status === 'completed') {
+          statusEl.textContent = 'Успешно';
+          statusEl.className = 'status success';
+          messageEl.textContent = 'Платеж уже был подтвержден!';
+          spinnerEl.style.display = 'none';
+          return;
+        }
+
+        // Отмечаем QR как отсканированный
+        if (!paymentData.isScanned) {
+          await paymentRef.update({
+            isScanned: true,
+            scanTime: firebase.firestore.FieldValue.serverTimestamp(),
+            status: 'processing',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+
+          statusEl.textContent = 'Обработка';
+          messageEl.textContent = 'QR-код отсканирован, обрабатываем платеж...';
+          
+          // Имитация задержки обработки
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        // Обновляем статус платежа
+        await paymentRef.update({
+          status: 'completed',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // Обновляем статус заказа
+        await db.collection('orders').doc(orderId).update({
+          status: 'оплачен',
+          paymentStatus: 'completed',
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        statusEl.textContent = 'Успешно';
+        statusEl.className = 'status success';
+        messageEl.textContent = 'Платеж успешно обработан!';
+        spinnerEl.style.display = 'none';
+
+      } catch (error) {
+        console.error('Error processing payment:', error);
+        statusEl.textContent = 'Ошибка';
+        statusEl.className = 'status error';
+        messageEl.textContent = 'Произошла ошибка при обработке платежа: ' + error.message;
+        spinnerEl.style.display = 'none';
+      }
+    }
+
+    // Запускаем обработку
+    processPayment();
+  </script>
+</body>
+</html> 
