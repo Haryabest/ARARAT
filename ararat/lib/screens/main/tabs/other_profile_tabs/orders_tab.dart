@@ -603,28 +603,6 @@ class _OrderCardState extends State<OrderCard> {
                       
                       SizedBox(height: 16),
                       
-                      // Объяснение и статус
-                      Container(
-                        padding: EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Color(0xFFF2ECE4),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Color(0xFF6C4425).withOpacity(0.15),
-                          ),
-                        ),
-                        child: Text(
-                          'QR-код содержит ссылку. При сканировании и переходе по ссылке оплата будет подтверждена автоматически.',
-                          style: TextStyle(
-                            color: Color(0xFF50321B),
-                            fontSize: 12,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      
-                      SizedBox(height: 16),
-                      
                       // Статус оплаты
                       Text(
                         isPaymentConfirmed

@@ -417,6 +417,20 @@ class _ProductsTabState extends State<ProductsTab> {
       final products = snapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
+        
+        // Проверяем и синхронизируем свойство inStock на основе фактического количества товара
+        final int quantity = (data['quantity'] as int?) ?? 0;
+        final bool currentInStock = data['inStock'] as bool? ?? false;
+        final bool shouldBeInStock = quantity > 0;
+        
+        // Если inStock не соответствует фактическому количеству, обновляем его в базе
+        if (currentInStock != shouldBeInStock) {
+          _firestore.collection('products').doc(doc.id).update({
+            'inStock': shouldBeInStock
+          });
+          data['inStock'] = shouldBeInStock;
+        }
+        
         return data;
       }).toList();
       
@@ -466,132 +480,484 @@ class _ProductsTabState extends State<ProductsTab> {
     _descriptionController.clear();
     _imageUrlController.clear();
     _ingredientsController.clear();
+    _discountController.clear();
     _weightController.clear();
     _selectedCategory = _categories.isNotEmpty ? _categories[0]['name'] as String : '';
+    _isDescriptionExpanded = false;
 
     // Показываем модальный лист с формой
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFEADAC5),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 16,
-          right: 16,
-          top: 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Добавить новый продукт',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Название продукта*',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _priceController,
-              decoration: const InputDecoration(
-                labelText: 'Цена*',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Описание*',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _ingredientsController,
-              decoration: const InputDecoration(
-                labelText: 'Состав продукта',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _weightController,
-              decoration: const InputDecoration(
-                labelText: 'Вес (например, 100г)*',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _imageUrlController,
-              decoration: const InputDecoration(
-                labelText: 'URL изображения',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              height: 55,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: const Color(0xFF70422F),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 6,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    // Закрываем модальное окно и затем добавляем товар
-                    Navigator.pop(context);
-                    
-                    // После закрытия окна добавляем товар
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        _addProductWithoutWaiting();
-                      }
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: const Center(
-                    child: Text(
-                      'Добавить',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter modalSetState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.95,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Заголовок с кнопкой закрытия
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => Navigator.pop(context),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ),
-                  ),
+                    
+                    // Заголовок продукта
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Center(
+                        child: TextField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            hintText: 'Введите название товара',
+                            hintStyle: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
+                          ),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                    
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            bottom: MediaQuery.of(context).viewInsets.bottom,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Поле для изображения
+                              Center(
+                                child: Container(
+                                  width: MediaQuery.of(context).size.width * 0.7,
+                                  height: 200,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF70422F),
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap: () {
+                                          _showImageUrlDialog(context);
+                                        },
+                                        child: _imageUrlController.text.isNotEmpty
+                                          ? CachedNetworkImage(
+                                              imageUrl: _imageUrlController.text,
+                                              fit: BoxFit.cover,
+                                              placeholder: (context, url) => const Center(
+                                                child: CircularProgressIndicator(),
+                                              ),
+                                              errorWidget: (context, url, error) => const Center(
+                                                child: Icon(
+                                                  Icons.add_photo_alternate,
+                                                  color: Colors.white,
+                                                  size: 60,
+                                                ),
+                                              ),
+                                            )
+                                          : const Center(
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.add_photo_alternate,
+                                                    color: Colors.white,
+                                                    size: 60,
+                                                  ),
+                                                  SizedBox(height: 8),
+                                                  Text(
+                                                    'Добавить изображение',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              
+                              // Комбо-бокс для описания с анимацией
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOutCubic,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: const Color(0xFF70422F),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () {
+                                      modalSetState(() {
+                                        _isDescriptionExpanded = !_isDescriptionExpanded;
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text(
+                                            'Описание',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                          AnimatedRotation(
+                                            turns: _isDescriptionExpanded ? 0.5 : 0,
+                                            duration: const Duration(milliseconds: 300),
+                                            curve: Curves.easeOutCubic,
+                                            child: const Icon(
+                                              Icons.keyboard_arrow_down,
+                                              color: Colors.white,
+                                              size: 28,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              
+                              // Плавно анимированный блок описания
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOutCubic,
+                                child: Container(
+                                  height: _isDescriptionExpanded ? null : 0,
+                                  padding: EdgeInsets.only(
+                                    top: _isDescriptionExpanded ? 12.0 : 0.0,
+                                    bottom: _isDescriptionExpanded ? 16.0 : 0.0,
+                                  ),
+                                  child: Opacity(
+                                    opacity: _isDescriptionExpanded ? 1.0 : 0.0,
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeOutCubic,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                        color: Colors.white,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: AnimatedSize(
+                                        duration: const Duration(milliseconds: 200),
+                                        child: TextField(
+                                          controller: _descriptionController,
+                                          decoration: const InputDecoration(
+                                            hintText: 'Введите описание товара',
+                                            contentPadding: EdgeInsets.all(16),
+                                            border: InputBorder.none,
+                                            hintStyle: TextStyle(color: Colors.grey),
+                                          ),
+                                          maxLines: null,
+                                          minLines: 3,
+                                          style: const TextStyle(fontSize: 15),
+                                          onChanged: (text) {
+                                            modalSetState(() {});
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              
+                              const SizedBox(height: 16),
+                              
+                              // Поля ввода цены и скидки
+                              Row(
+                                children: [
+                                  // Поле цены
+                                  Expanded(
+                                    child: Container(
+                                      height: 55,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                        color: Colors.white,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: TextField(
+                                        controller: _priceController,
+                                        decoration: const InputDecoration(
+                                          hintText: 'Цена',
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                                          border: InputBorder.none,
+                                          hintStyle: TextStyle(color: Colors.grey),
+                                          suffixText: '₽',
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Поле скидки
+                                  Expanded(
+                                    child: Container(
+                                      height: 55,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                        color: Colors.white,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: TextField(
+                                        controller: _discountController,
+                                        decoration: const InputDecoration(
+                                          hintText: 'Скидка',
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                                          border: InputBorder.none,
+                                          hintStyle: TextStyle(color: Colors.grey),
+                                          suffixText: '%',
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              
+                              // Поля состава и граммовки
+                              Row(
+                                children: [
+                                  // Поле состава
+                                  Expanded(
+                                    child: Container(
+                                      height: 55,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                        color: Colors.white,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: TextField(
+                                        controller: _ingredientsController,
+                                        decoration: const InputDecoration(
+                                          hintText: 'Состав',
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                                          border: InputBorder.none,
+                                          hintStyle: TextStyle(color: Colors.grey),
+                                        ),
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Поле граммовки
+                                  Expanded(
+                                    child: Container(
+                                      height: 55,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                        color: Colors.white,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: TextField(
+                                        controller: _weightController,
+                                        decoration: const InputDecoration(
+                                          hintText: 'Граммовка',
+                                          contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                                          border: InputBorder.none,
+                                          hintStyle: TextStyle(color: Colors.grey),
+                                          suffixText: 'г',
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              
+                              const SizedBox(height: 16),
+                              
+                              // Выбор категории
+                              Theme(
+                                data: Theme.of(context).copyWith(
+                                  canvasColor: const Color(0xFF70422F),
+                                  shadowColor: Colors.black.withOpacity(0.2),
+                                ),
+                                child: Container(
+                                  height: 55,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    color: const Color(0xFF70422F),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(12),
+                                      onTap: () {
+                                        _showCategorySelectionDialog(context, modalSetState);
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              _selectedCategory ?? 'Выберите категорию',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            const Icon(
+                                              Icons.arrow_drop_down,
+                                              color: Colors.white,
+                                              size: 28,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              
+                              // Кнопка добавления товара
+                              Container(
+                                height: 55,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: const Color(0xFF70422F),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () {
+                                      // Закрываем модальное окно и добавляем товар
+                                      Navigator.pop(context);
+                                      
+                                      // После закрытия окна добавляем товар
+                                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                                        if (mounted) {
+                                          _addProductWithoutWaiting();
+                                        }
+                                      });
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: const Center(
+                                      child: Text(
+                                        'Добавить',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
   
@@ -963,6 +1329,7 @@ class _ProductsTabState extends State<ProductsTab> {
       }
       
       // Обновляем количество и статус наличия
+      // Устанавливаем inStock true только если количество товара больше 0
       await _firestore.collection('products').doc(productId).update({
         'quantity': newQuantity,
         'inStock': newQuantity > 0,
@@ -1282,9 +1649,6 @@ class _ProductsTabState extends State<ProductsTab> {
                                   ),
                                 ),
                               ),
-                              
-                              // Поля для ввода
-                              // ... (аналогично форме добавления) ...
                               
                               // Плавно анимированный блок описания
                               AnimatedSize(
@@ -1671,10 +2035,70 @@ class _ProductsTabState extends State<ProductsTab> {
     }
   }
 
+  Future<void> _showSuccessSnackBar(String message) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+  
+  // Метод для отображения сообщений об ошибках
+  Future<void> _showErrorSnackBar(String message) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+  
+  // Метод для синхронизации индикаторов наличия товаров
+  Future<void> _syncAllProducts() async {
+    try {
+      setState(() {
+        _isLoading = true;
+      });
+      
+      QuerySnapshot productsSnapshot = await FirebaseFirestore.instance.collection('products').get();
+      int updatedCount = 0;
+      
+      for (var doc in productsSnapshot.docs) {
+        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+        int quantity = data['quantity'] ?? 0;
+        bool currentAvailability = data['available'] ?? false;
+        bool newAvailability = quantity > 0;
+        
+        // Обновляем флаг доступности товара, если он не соответствует количеству
+        if (currentAvailability != newAvailability) {
+          await FirebaseFirestore.instance.collection('products').doc(doc.id).update({
+            'available': newAvailability
+          });
+          updatedCount++;
+        }
+      }
+      
+      setState(() {
+        _isLoading = false;
+      });
+      
+      _showSuccessSnackBar('Синхронизировано $updatedCount товаров');
+      
+      // Обновляем список товаров после синхронизации
+      _loadProducts();
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      _showErrorSnackBar('Ошибка синхронизации: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white,
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           _showAddProductForm();
@@ -1835,7 +2259,8 @@ class _ProductsTabState extends State<ProductsTab> {
                         final imageUrl = product['imageUrl'] as String? ?? '';
                         final name = product['name'] as String? ?? 'Без названия';
                         final price = product['price'] ?? 0;
-                        final inStock = product['inStock'] ?? false;
+                        final quantity = (product['quantity'] as int?) ?? 0;
+                        final inStock = quantity > 0;
 
                         return Card(
                           clipBehavior: Clip.antiAlias,

@@ -351,17 +351,34 @@ class CartManager {
 
   // Метод для обновления локальных количеств товаров в корзине
   void refreshLocalQuantities(List<Map<String, dynamic>> products) {
-    print('Обновление локальных количеств товаров в корзине');
+    print('Обновление локальных количеств товаров с учетом товаров в корзине');
+    
+    // Сначала обновляем локальные количества из БД
     for (var product in products) {
       final String productName = product['name'];
-      final int quantity = product['quantity'] as int? ?? 0;
-      _localProductQuantity[productName] = quantity;
+      final int originalQuantity = product['quantity'] as int? ?? 0;
+      
+      // Устанавливаем начальное значение из БД
+      _localProductQuantity[productName] = originalQuantity;
     }
-    // Обновляем UI
-    final newList = List<Map<String, dynamic>>.from(cartProducts);
-    cartNotifier.value = newList;
     
-    print('Локальные количества товаров обновлены');
+    // Затем вычитаем количество товаров, уже находящихся в корзине
+    for (var cartItem in cartProducts) {
+      final String cartItemName = cartItem['name'];
+      final int cartItemQuantity = cartItem['quantity'] as int;
+      
+      if (_localProductQuantity.containsKey(cartItemName)) {
+        // Уменьшаем доступное количество на количество в корзине
+        _localProductQuantity[cartItemName] = _localProductQuantity[cartItemName]! - cartItemQuantity;
+        
+        // Если получилось отрицательное число, устанавливаем 0
+        if (_localProductQuantity[cartItemName]! < 0) {
+          _localProductQuantity[cartItemName] = 0;
+        }
+      }
+    }
+    
+    print('Локальные количества товаров обновлены с учетом корзины');
   }
 }
 
