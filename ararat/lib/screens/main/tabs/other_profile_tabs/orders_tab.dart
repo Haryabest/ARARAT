@@ -33,7 +33,11 @@ class _OrderCardState extends State<OrderCard> {
 
   @override
   void dispose() {
-    _paymentCheckTimer?.cancel();
+    print('Вызван метод dispose для _OrderCardState');
+    if (_paymentCheckTimer != null) {
+      _paymentCheckTimer!.cancel();
+      _paymentCheckTimer = null;
+    }
     super.dispose();
   }
   
@@ -437,7 +441,10 @@ class _OrderCardState extends State<OrderCard> {
   }
   
   // Метод для показа диалога QR-кода оплаты
-  Future<void> _showQrPaymentDialog(BuildContext context, Order order) async {
+  void _showQrPaymentDialog(BuildContext context, Order order) async {
+    // Проверка before setState
+    if (!mounted) return;
+    
     setState(() => _isProcessingPayment = true);
     
     try {
@@ -458,412 +465,258 @@ class _OrderCardState extends State<OrderCard> {
       final String qrData = paymentResult['qrData'];
       _currentPaymentId = paymentId;
       
-      if (mounted) {
-        bool isScanned = false;
-        bool isPaymentConfirmed = false;
-        
-        // Сохраняем состояние таймера для автоматической проверки
-        _startPaymentStatusChecking(paymentId);
-        
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogContext) {
-            return StatefulBuilder(
-              builder: (context, setDialogState) {
-                // Обновление статуса сканирования и подтверждения
-                void updatePaymentStatus() async {
+      // Проверяем после async операции
+      if (!mounted) return;
+      
+      // Проверяем перед показом диалога
+      if (!mounted) return;
+      
+      // Показываем диалог с QR-кодом
+      bool dialogResult = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          bool isScanned = false;
+          bool isPaymentConfirmed = false;
+          
+          return StatefulBuilder(
+            builder: (builderContext, setDialogState) {
+              // Запускаем проверку статуса платежа
+              void startStatusCheck() {
+                Timer.periodic(Duration(seconds: 3), (timer) async {
+                  if (!mounted) {
+                    timer.cancel();
+                    return;
+                  }
+                  
                   try {
                     final status = await _paymentService.checkPaymentStatus(paymentId);
-                    if (status == 'processing' && !isScanned) {
-                      setDialogState(() {
-                        isScanned = true;
-                      });
-                    } else if (status == 'completed' && !isPaymentConfirmed) {
+                    if (status == 'completed') {
+                      timer.cancel();
+                      
+                      // Обновляем состояние диалога для показа галочки
                       setDialogState(() {
                         isScanned = true;
                         isPaymentConfirmed = true;
                       });
                       
-                      // Показываем сообщение об успешной оплате
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Платеж успешно обработан! Потяните вниз для обновления списка заказов.'),
-                          backgroundColor: Colors.green,
-                          duration: Duration(seconds: 5),
-                        ),
-                      );
+                      // Ждем 2 секунды и закрываем диалог
+                      Future.delayed(Duration(seconds: 2), () {
+                        if (mounted) {
+                          Navigator.of(dialogContext).pop(true);
+                        }
+                      });
                     }
                   } catch (e) {
-                    print('Ошибка при обновлении статуса оплаты: $e');
+                    print('Ошибка при проверке статуса платежа: $e');
                   }
-                }
-                
-                return AlertDialog(
-                  title: Column(
-                children: [
-                      Text(
-                        'Оплата заказа',
-                    style: TextStyle(
-                      color: Color(0xFF50321B),
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                });
+              }
+              
+              // Запускаем проверку статуса при первом построении диалога
+              if (!isScanned && !isPaymentConfirmed) {
+                Future.microtask(startStatusCheck);
+              }
+              
+              return AlertDialog(
+                title: Column(
+                  children: [
+                    Text(
+                      'Оплата заказа',
+                      style: TextStyle(
+                        color: Color(0xFF50321B),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                        textAlign: TextAlign.center,
-                  ),
-                      SizedBox(height: 4),
-                  Text(
-                        'Сумма: ${order.total.toStringAsFixed(2)} ₽',
-                        style: TextStyle(
-                      color: Color(0xFF50321B),
-                          fontSize: 16,
+                    SizedBox(height: 4),
+                    Text(
+                      'Сумма: ${order.total.toStringAsFixed(2)} ₽',
+                      style: TextStyle(
+                        color: Color(0xFF50321B),
+                        fontSize: 16,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
-                        textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-                  content: Container(
-                    width: 280,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                children: [
-                        // QR-код для оплаты
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // QR-код
+                  ],
+                ),
+                content: Container(
+                  width: 280,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // QR-код для оплаты
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // QR-код или галочка
+                          Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 10,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            padding: EdgeInsets.all(10),
+                            child: isPaymentConfirmed
+                                ? Center(
+                                    child: Icon(
+                                      Icons.check_circle,
+                                      color: Colors.green,
+                                      size: 100,
+                                    ),
+                                  )
+                                : QrImageView(
+                                    data: qrData,
+                                    version: QrVersions.auto,
+                                    size: 180,
+                                    padding: EdgeInsets.zero,
+                                    backgroundColor: Colors.white,
+                                  ),
+                          ),
+                          
+                          // Анимация сканирования
+                          if (isScanned && !isPaymentConfirmed)
                             Container(
                               width: 200,
                               height: 200,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Colors.white.withOpacity(0.3),
                                 borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.1),
-                                    blurRadius: 10,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
                               ),
-                              padding: EdgeInsets.all(10),
-                              child: isPaymentConfirmed
-                                  ? Center(
-                                      child: Icon(
-                                        Icons.check_circle,
-                                        color: Colors.green,
-                                        size: 100,
-                                      ),
-                                    )
-                                  : QrImageView(
-                                      data: qrData,
-                                      version: QrVersions.auto,
-                                      size: 180,
-                                      padding: EdgeInsets.zero,
-                                      backgroundColor: Colors.white,
-                                    ),
-                            ),
-                            
-                            // Анимация сканирования
-                            if (isScanned && !isPaymentConfirmed)
-                              Container(
-                                width: 200,
-                                height: 200,
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.3),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Stack(
-                                  children: [
-                                    // Анимированное перемещение полосы сканирования
-                                    AnimatedPositioned(
-                                      duration: Duration(seconds: 2),
-                                      curve: Curves.easeInOut,
-                                      top: 0,
-                                      bottom: 0,
-                                      left: 0,
-                                      right: 0,
-                                      child: Container(
-                                        height: 2,
-                                        color: Colors.green.withOpacity(0.7),
-                                      ),
-                                    ),
-                                    Center(
-                                      child: CircularProgressIndicator(
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                  ],
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.green,
                                 ),
                               ),
-                          ],
-                        ),
-                        
-                        SizedBox(height: 16),
-                        
-                        // Объяснение работы QR-кода
-                        Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Color(0xFFF2ECE4),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Color(0xFF6C4425).withOpacity(0.15),
                             ),
+                        ],
+                      ),
+                      
+                      SizedBox(height: 16),
+                      
+                      // Объяснение и статус
+                      Container(
+                        padding: EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Color(0xFFF2ECE4),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Color(0xFF6C4425).withOpacity(0.15),
                           ),
-                          child: Text(
-                            'QR-код содержит ссылку. При сканировании и переходе по ссылке оплата будет подтверждена автоматически.',
-                    style: TextStyle(
-                      color: Color(0xFF50321B),
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                    ),
-                            textAlign: TextAlign.center,
-                  ),
                         ),
-                        
-                        SizedBox(height: 16),
-                        
-                        // Статус оплаты
-                  Text(
-                          isPaymentConfirmed
-                              ? 'Оплата подтверждена!'
-                              : isScanned
-                                  ? 'QR-код отсканирован, ожидаем подтверждение оплаты...'
-                                  : 'Отсканируйте QR-код в приложении банка для оплаты',
-                    style: TextStyle(
-                            color: isPaymentConfirmed ? Colors.green : Color(0xFF50321B),
-                      fontSize: 14,
-                            fontWeight: isPaymentConfirmed ? FontWeight.bold : FontWeight.normal,
+                        child: Text(
+                          'QR-код содержит ссылку. При сканировании и переходе по ссылке оплата будет подтверждена автоматически.',
+                          style: TextStyle(
+                            color: Color(0xFF50321B),
+                            fontSize: 12,
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        
-                        SizedBox(height: 16),
-                        
-                        // Для тестирования: кнопка симуляции сканирования и кнопка открытия ссылки
-                        if (!isScanned && !isPaymentConfirmed)
-                          Column(
-                            children: [
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  setDialogState(() {
-                                    isScanned = true;
-                                  });
-                                  
-                                  // Через 3 секунды переводим платеж в статус в обработке
-                                  await Future.delayed(Duration(seconds: 3));
-                                  await _paymentService.updatePaymentStatus(paymentId, 'processing');
-                                },
-                                icon: Icon(Icons.qr_code_scanner),
-                                label: Text('Симулировать сканирование'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Color(0xFF50321B),
-                                  foregroundColor: Colors.white,
-                                ),
-                              ),
-                              SizedBox(height: 8),
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  // Открываем ссылку из QR-кода для тестирования
-                                  final Uri url = Uri.parse(qrData);
-                                  
-                                  if (await canLaunchUrl(url)) {
-                                    setDialogState(() {
-                                      isScanned = true;
-                                    });
-                                    
-                                    await launchUrl(url);
-                                    
-                                    // Симулируем процесс оплаты для тестирования
-                                    try {
-                                      // Подтверждаем платеж сразу после открытия ссылки
-                                      await _paymentService.updatePaymentStatus(paymentId, 'processing');
-                                      
-                                      // Через 2 секунды завершаем платеж
-                                      await Future.delayed(Duration(seconds: 2));
-                                      await _paymentService.updatePaymentStatus(paymentId, 'completed');
-                                      
-                                      // Обновляем статус в диалоге
-                                      setDialogState(() {
-                                        isPaymentConfirmed = true;
-                                      });
-                                    } catch (e) {
-                                      print('Ошибка при симуляции оплаты: $e');
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Ошибка при обработке платежа: ${e.toString()}'),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  } else {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Невозможно открыть ссылку: $qrData'),
-                                        backgroundColor: Colors.red,
-                                      ),
-                                    );
-                                  }
-                                },
-                                icon: Icon(Icons.open_in_browser),
-                                label: Text('Открыть ссылку для оплаты'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-                      ],
-                    ),
-                  ),
-                  actions: [
-                    // Кнопка закрытия, доступна только если платеж подтвержден или отменен
-                    TextButton(
-                      onPressed: isPaymentConfirmed 
-                        ? () {
-                            Navigator.of(dialogContext).pop();
-                          }
-                        : null,
-                      child: Text(
-                        isPaymentConfirmed ? 'Готово' : 'Подождите...',
-                    style: TextStyle(
-                          color: isPaymentConfirmed ? Color(0xFF50321B) : Colors.grey,
+                      ),
+                      
+                      SizedBox(height: 16),
+                      
+                      // Статус оплаты
+                      Text(
+                        isPaymentConfirmed
+                            ? 'Оплата подтверждена!'
+                            : isScanned
+                                ? 'QR-код отсканирован, ожидаем подтверждение оплаты...'
+                                : 'Отсканируйте QR-код в приложении банка для оплаты',
+                        style: TextStyle(
+                          color: isPaymentConfirmed ? Colors.green : Color(0xFF50321B),
+                          fontSize: 14,
+                          fontWeight: isPaymentConfirmed ? FontWeight.bold : FontWeight.normal,
                         ),
+                        textAlign: TextAlign.center,
+                      ),
+                      
+                      SizedBox(height: 16),
+                      
+                      // Тестовые кнопки
+                      if (!isScanned && !isPaymentConfirmed)
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final Uri url = Uri.parse(qrData);
+                            if (await canLaunchUrl(url)) {
+                              setDialogState(() {
+                                isScanned = true;
+                              });
+                              await launchUrl(url);
+                            }
+                          },
+                          icon: Icon(Icons.open_in_browser),
+                          label: Text('Открыть ссылку для оплаты'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  // Кнопка закрытия
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop(isPaymentConfirmed);
+                    },
+                    child: Text(
+                      isPaymentConfirmed ? 'Готово' : 'Закрыть',
+                      style: TextStyle(
+                        color: Color(0xFF50321B),
                       ),
                     ),
-                    // Кнопка отмены, доступна только если платеж не подтвержден
-                    if (!isPaymentConfirmed)
-                      TextButton(
-                        onPressed: () {
-                          _paymentCheckTimer?.cancel();
-                          Navigator.of(dialogContext).pop();
-                        },
-                        child: Text(
-                          'Отмена',
-                          style: TextStyle(color: Colors.red),
-                    ),
                   ),
                 ],
-                );
-              },
-            );
-          },
+              );
+            },
+          );
+        },
+      ) ?? false;
+      
+      // Проверяем состояние виджета после закрытия диалога
+      if (!mounted) return;
+      
+      // Обновляем UI на основе результата диалога
+      if (dialogResult) {
+        // Диалог закрыт после успешной оплаты
+        // Показываем уведомление об успешной оплате
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Платеж успешно обработан! Потяните вниз для обновления списка заказов.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
+          ),
         );
       }
+      
     } catch (e) {
       // Показываем ошибку пользователю
       print('Ошибка при создании QR-кода для оплаты: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ошибка при создании QR-кода для оплаты: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      setState(() => _isProcessingPayment = false);
-    }
-  }
-  
-  // Запуск периодической проверки статуса платежа
-  void _startPaymentStatusChecking(String paymentId) {
-    // Отменяем предыдущий таймер, если он был
-    _paymentCheckTimer?.cancel();
-    
-    // Запускаем новый таймер, который будет проверять статус каждые 3 секунды
-    _paymentCheckTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
-      // Проверяем статус платежа
-      try {
-        final status = await _paymentService.checkPaymentStatus(paymentId);
-        print('Проверка статуса платежа $paymentId: $status');
-        
-        // Обновляем UI в зависимости от статуса
-        if (status == 'processing') {
-          // Платеж в обработке - QR-код был отсканирован
-          setState(() {
-            // В этой точке UI диалога должен показать, что QR-код отсканирован
-            // Обновление интерфейса происходит в диалоге через StatefulBuilder
-          });
-        } else if (status == 'completed') {
-          // Платеж успешно завершен
-          setState(() {
-            // Обновление интерфейса происходит в диалоге через StatefulBuilder
-          });
-          
-          // Показываем сообщение об успешной оплате
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Платеж успешно обработан! Потяните вниз для обновления списка заказов.'),
-                backgroundColor: Colors.green,
-                duration: Duration(seconds: 5),
-              ),
-            );
-          }
-          
-          // Останавливаем проверку, т.к. платеж завершен
-          _paymentCheckTimer?.cancel();
-          _paymentCheckTimer = null;
-          
-        } else if (status == 'failed') {
-          // Платеж не удался
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Ошибка при обработке платежа.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          
-          // Останавливаем проверку
-          _paymentCheckTimer?.cancel();
-          _paymentCheckTimer = null;
-        }
-      } catch (e) {
-        print('Ошибка при проверке статуса платежа: $e');
-      }
-    });
-  }
-  
-  // Вспомогательные методы
-  Widget _buildCompactInfoRow(IconData icon, String title, String value, {Color? valueColor}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-        Icon(
-          icon,
-          size: 14,
-          color: const Color(0xFF6C4425),
-        ),
-        const SizedBox(width: 4),
-                        Expanded(
-          child: RichText(
-            text: TextSpan(
-              style: const TextStyle(
-                color: Color(0xFF50321B),
-                fontFamily: 'Inter',
-                fontSize: 13,
-              ),
-              children: [
-                TextSpan(
-                  text: '$title ',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                TextSpan(
-                  text: value,
-                  style: TextStyle(
-                    color: valueColor,
-                    fontWeight: valueColor != null ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
-            ],
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка: ${e.toString()}'),
+            backgroundColor: Colors.red,
           ),
-        ),
-      ),
-      ],
-    );
+        );
+      }
+    } finally {
+      // Сбрасываем состояние загрузки
+      if (mounted) {
+        setState(() => _isProcessingPayment = false);
+      }
+    }
   }
   
   // Метод для создания элемента товара
@@ -1112,6 +965,45 @@ class _OrderCardState extends State<OrderCard> {
         ),
       );
     }
+  }
+
+  // Вспомогательный метод для отображения компактной строки информации
+  Widget _buildCompactInfoRow(IconData icon, String title, String value, {Color? valueColor}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: const Color(0xFF6C4425),
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(
+                color: Color(0xFF50321B),
+                fontFamily: 'Inter',
+                fontSize: 13,
+              ),
+              children: [
+                TextSpan(
+                  text: '$title ',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                TextSpan(
+                  text: value,
+                  style: TextStyle(
+                    color: valueColor,
+                    fontWeight: valueColor != null ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1511,5 +1403,11 @@ class _OrdersTabState extends State<OrdersTab> {
         ],
       ),
     );
+  }
+
+  // Пустая реализация метода для совместимости
+  void _startPaymentStatusChecking(String paymentId) {
+    // Этот метод оставлен для поддержки обратной совместимости
+    // Проверка статуса производится внутри диалога
   }
 } 
