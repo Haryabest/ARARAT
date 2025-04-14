@@ -1030,6 +1030,16 @@ class _OrdersTabState extends State<OrdersTab> {
       // Применяем обновления в основной коллекции заказов
       await _firestore.collection('orders').doc(orderId).update(updateData);
       
+      // Создаем уведомление для пользователя при любой смене статуса
+      if (userId.isNotEmpty) {
+        await _createOrderNotification(
+          userId: userId,
+          orderId: orderId,
+          orderNumber: orderData['orderNumber'] ?? orderData['id'],
+          status: newStatus,
+        );
+      }
+      
       // Синхронизируем статус в коллекции пользователя, если известен userId
       if (userId.isNotEmpty) {
         try {
@@ -1125,6 +1135,67 @@ class _OrdersTabState extends State<OrdersTab> {
           ),
         );
       }
+    }
+  }
+
+  // Метод для создания уведомления о заказе
+  Future<void> _createOrderNotification({
+    required String userId,
+    required String orderId,
+    required dynamic orderNumber,
+    required String status,
+  }) async {
+    try {
+      // Получаем текст уведомления в зависимости от статуса
+      String message = _getNotificationMessage(status, orderNumber);
+      
+      // Создаем данные уведомления
+      Map<String, dynamic> notificationData = {
+        'userId': userId,
+        'orderId': orderId,
+        'orderNumber': orderNumber,
+        'message': message,
+        'type': 'order_status',
+        'status': status,
+        'read': false,
+        'createdAt': FieldValue.serverTimestamp(),
+        'data': {
+          'orderId': orderId,
+          'status': status,
+        }
+      };
+      
+      // Записываем уведомление в коллекцию notifications
+      await _firestore.collection('notifications').add(notificationData);
+      
+      // Дублируем уведомление в коллекцию пользователя
+      await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('notifications')
+          .add(notificationData);
+      
+      print('Создано уведомление о смене статуса заказа на: $status');
+    } catch (e) {
+      print('Ошибка при создании уведомления: $e');
+    }
+  }
+  
+  // Метод для получения текста уведомления в зависимости от статуса
+  String _getNotificationMessage(String status, dynamic orderNumber) {
+    switch (status) {
+      case 'новый':
+        return 'Ваш заказ №$orderNumber принят в обработку. Спасибо за заказ!';
+      case 'в обработке':
+        return 'Ваш заказ №$orderNumber находится в обработке. Мы начали готовить его к отправке!';
+      case 'отправлен':
+        return 'Ваш заказ №$orderNumber отправлен и скоро будет доставлен!';
+      case 'доставлен':
+        return 'Ваш заказ №$orderNumber успешно доставлен. Спасибо за покупку!';
+      case 'отменен':
+        return 'Ваш заказ №$orderNumber был отменен администратором.';
+      default:
+        return 'Статус вашего заказа №$orderNumber изменен на: $status';
     }
   }
 
