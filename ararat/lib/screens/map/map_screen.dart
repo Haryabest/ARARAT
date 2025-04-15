@@ -559,13 +559,36 @@ class _MapScreenState extends State<MapScreen> {
         final List<String> addressParts = [];
         
         // Добавляем компоненты адреса, если они не пустые
-        if (place.street != null && place.street!.isNotEmpty) {
-          addressParts.add(place.street!);
-        }
+        String streetWithHouse = '';
         
-        if (place.thoroughfare != null && place.thoroughfare!.isNotEmpty && 
-            place.thoroughfare != place.street) {
-          addressParts.add(place.thoroughfare!);
+        if (place.street != null && place.street!.isNotEmpty) {
+          streetWithHouse = place.street!;
+          
+          // Добавляем номер дома, если он есть
+          if (place.subThoroughfare != null && place.subThoroughfare!.isNotEmpty) {
+            streetWithHouse += ', д. ${place.subThoroughfare}';
+          } else if (place.name != null && place.name!.isNotEmpty && 
+                   place.name != place.street &&
+                   RegExp(r'\d+').hasMatch(place.name!)) {
+            // Если в имени есть цифры, возможно это номер дома
+            streetWithHouse += ', д. ${place.name}';
+          }
+          
+          addressParts.add(streetWithHouse);
+        } else if (place.thoroughfare != null && place.thoroughfare!.isNotEmpty) {
+          streetWithHouse = place.thoroughfare!;
+          
+          // Добавляем номер дома, если он есть
+          if (place.subThoroughfare != null && place.subThoroughfare!.isNotEmpty) {
+            streetWithHouse += ', д. ${place.subThoroughfare}';
+          } else if (place.name != null && place.name!.isNotEmpty && 
+                   place.name != place.thoroughfare &&
+                   RegExp(r'\d+').hasMatch(place.name!)) {
+            // Если в имени есть цифры, возможно это номер дома
+            streetWithHouse += ', д. ${place.name}';
+          }
+          
+          addressParts.add(streetWithHouse);
         }
         
         if (place.subLocality != null && place.subLocality!.isNotEmpty) {
@@ -588,6 +611,18 @@ class _MapScreenState extends State<MapScreen> {
         final fullAddress = addressParts.isNotEmpty 
             ? addressParts.join(', ')
             : 'Адрес не определен';
+        
+        // Для отладки: печатаем все доступные поля места
+        print('DEBUG: Place fields:');
+        print('name: ${place.name}');
+        print('street: ${place.street}');
+        print('thoroughfare: ${place.thoroughfare}');
+        print('subThoroughfare: ${place.subThoroughfare}');
+        print('locality: ${place.locality}');
+        print('subLocality: ${place.subLocality}');
+        print('administrativeArea: ${place.administrativeArea}');
+        print('postalCode: ${place.postalCode}');
+        print('country: ${place.country}');
         
         widget.onAddressSelected(fullAddress, position);
         Navigator.pop(context);
