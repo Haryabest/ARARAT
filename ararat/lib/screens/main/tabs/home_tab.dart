@@ -457,7 +457,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     
     // Инициализируем контроллер для скролла
     _scrollController = ScrollController();
-    _scrollController.addListener(_scrollListener);
+    _scrollController.addListener(_onScroll);
     
     // Инициализируем контроллер для анимации обновления
     _refreshAnimController = AnimationController(
@@ -761,6 +761,11 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
     if (_scrollController.offset <= -70 && !_isRefreshing) {
       _startRefresh();
     }
+    
+    // Проверка достижения конца списка для загрузки дополнительных данных
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent) {
+      _loadMoreProducts();
+    }
   }
   
   // Метод для запуска процесса обновления
@@ -784,10 +789,7 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
   }
   
   void _scrollListener() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent) {
-      // Load more data
-      _loadMoreProducts();
-    }
+    // Функциональность перенесена в _onScroll
   }
   
   void _loadMoreProducts() {
@@ -1024,27 +1026,36 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
             
             // Закрепленная кнопка поиска сверху
             AnimatedPositioned(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
+              duration: const Duration(milliseconds: 400),
+              curve: Curves.easeInOutCubic,
               top: _isSearchPinned ? 0 : -70,
               left: 0,
               right: 0,
               child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
+                duration: const Duration(milliseconds: 300),
                 opacity: _isSearchPinned ? 1.0 : 0.0,
                 child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFA99378),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
                       ),
                     ],
                   ),
-                  child: _buildSearchButton(),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6C4425),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.7),
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: _buildSearchButton(),
+                  ),
                 ),
               ),
             ),
