@@ -1,0 +1,2 @@
+C:/PROJECTS/ARARAT1/ARARAT/ararat_admin/android/app/.cxx/RelWithDebInfo/2b5m3932/x86_64/CMakeFiles/edit_cache.dir
+C:/PROJECTS/ARARAT1/ARARAT/ararat_admin/android/app/.cxx/RelWithDebInfo/2b5m3932/x86_64/CMakeFiles/rebuild_cache.dir

@@ -94,6 +94,107 @@ exports.paymentConfirm = functions.https.onRequest(async (req, res) => {
   }
 });
 
+// Функция для отправки push-уведомлений при создании новых уведомлений
+exports.sendNotificationToDevice = functions.firestore
+  .document('notifications/{notificationId}')
+  .onCreate(async (snapshot, context) => {
+    try {
+      const notificationData = snapshot.data();
+      
+      // Проверяем наличие userId
+      if (!notificationData.userId) {
+        console.log('Уведомление без userId, пропускаем отправку push-уведомления');
+        return null;
+      }
+      
+      console.log(`Отправка push-уведомления пользователю: ${notificationData.userId}`);
+      
+      // Получаем токены устройств пользователя
+      const userTokensSnapshot = await admin.firestore()
+        .collection('users')
+        .doc(notificationData.userId)
+        .collection('tokens')
+        .get();
+      
+      if (userTokensSnapshot.empty) {
+        console.log('Нет зарегистрированных устройств для пользователя');
+        return null;
+      }
+      
+      // Формируем сообщение для отправки
+      const message = {
+        notification: {
+          title: 'АРАРАТ',
+          body: notificationData.message || 'У вас новое уведомление',
+        },
+        data: {
+          type: notificationData.type || 'general',
+          orderId: notificationData.orderId || '',
+          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+        },
+      };
+      
+      // Собираем все токены пользователя
+      const tokens = [];
+      userTokensSnapshot.forEach(doc => {
+        const tokenData = doc.data();
+        tokens.push(tokenData.token);
+      });
+      
+      console.log(`Отправляем уведомления на ${tokens.length} устройств`);
+      
+      // Отправляем уведомление на все токены
+      const response = await admin.messaging().sendMulticast({
+        tokens,
+        ...message
+      });
+      
+      console.log(`Успешно отправлено: ${response.successCount} из ${tokens.length}`);
+      
+      // Если есть неуспешные отправки, выводим информацию
+      if (response.failureCount > 0) {
+        const failedTokens = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            failedTokens.push({
+              token: tokens[idx],
+              error: resp.error.message,
+            });
+          }
+        });
+        
+        console.log('Список неудачных отправок:', JSON.stringify(failedTokens));
+        
+        // Удаляем недействительные токены
+        const deletePromises = failedTokens
+          .filter(failure => 
+            // Удаляем токены только если ошибка связана с недействительным токеном
+            failure.error.includes('not registered') || 
+            failure.error.includes('invalid') ||
+            failure.error.includes('unavailable')
+          )
+          .map(failure =>
+            admin.firestore()
+              .collection('users')
+              .doc(notificationData.userId)
+              .collection('tokens')
+              .doc(failure.token)
+              .delete()
+          );
+        
+        if (deletePromises.length > 0) {
+          await Promise.all(deletePromises);
+          console.log(`Удалено ${deletePromises.length} недействительных токенов`);
+        }
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Ошибка при отправке push-уведомления:', error);
+      return { error: error.message };
+    }
+  });
+
 function generateHTML(data) {
   const status = data.success ? 'Успешно' : 'Ошибка';
   const message = data.message || data.error || '';
