@@ -324,6 +324,8 @@ class _ProductsTabState extends State<ProductsTab> {
   void _showAddCategoryDialog() {
     // Создаем контроллер здесь
     final categoryController = TextEditingController();
+    final Color backgroundColor = const Color(0xFFFAF6F1);
+    final Color primaryColor = const Color(0xFF50321B);
     
     // Функция для форматирования текста категории
     String formatCategoryName(String text) {
@@ -338,8 +340,18 @@ class _ProductsTabState extends State<ProductsTab> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              backgroundColor: const Color(0xFFEADAC5),
-              title: const Text('Новая категория', textAlign: TextAlign.center),
+              backgroundColor: backgroundColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+              title: Text(
+                'Новая категория', 
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: primaryColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               content: TextField(
                 controller: categoryController,
                 decoration: InputDecoration(
@@ -347,10 +359,10 @@ class _ProductsTabState extends State<ProductsTab> {
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8.0),
+                    borderRadius: BorderRadius.circular(25.0),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 ),
                 onChanged: (text) {
                   // Форматируем текст при вводе
@@ -374,11 +386,18 @@ class _ProductsTabState extends State<ProductsTab> {
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
                   },
-                  child: const Text('Отмена', style: TextStyle(color: Color(0xFF70422F))),
+                  style: TextButton.styleFrom(
+                    foregroundColor: primaryColor,
+                  ),
+                  child: const Text('Отмена'),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF70422F),
+                    backgroundColor: primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
                   ),
                   onPressed: () {
                     final categoryName = categoryController.text;
@@ -394,7 +413,7 @@ class _ProductsTabState extends State<ProductsTab> {
                     Navigator.of(dialogContext).pop();
                     _addCategory(categoryName);
                   },
-                  child: const Text('Добавить', style: TextStyle(color: Colors.white)),
+                  child: const Text('Добавить'),
                 ),
               ],
             );
@@ -474,11 +493,6 @@ class _ProductsTabState extends State<ProductsTab> {
 
   // Метод для отображения формы добавления товара
   void _showAddProductForm() {
-    // Цветовая схема
-    const Color backgroundColor = Color(0xFFFAF6F1);
-    const Color primaryColor = Color(0xFF50321B);
-    const Color textColor = Color(0xFF2F3036);
-    
     // Очищаем поля формы
     _nameController.clear();
     _priceController.clear();
@@ -494,9 +508,9 @@ class _ProductsTabState extends State<ProductsTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: backgroundColor,
+      backgroundColor: const Color(0xFFEADAC5),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
         return StatefulBuilder(
@@ -504,62 +518,39 @@ class _ProductsTabState extends State<ProductsTab> {
             return Container(
               height: MediaQuery.of(context).size.height * 0.95,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Заголовок с кнопкой закрытия
                     Padding(
                       padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back, color: primaryColor),
-                            onPressed: () => Navigator.pop(context),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
-                          const Text(
-                            'Добавление товара',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: primaryColor,
-                            ),
-                          ),
-                          const SizedBox(width: 24), // для выравнивания заголовка по центру
-                        ],
+                      child: IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => Navigator.pop(context),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ),
                     
-                    // Поле для названия товара
+                    // Заголовок продукта
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 20.0, top: 20.0),
-                      child: TextField(
-                        controller: _nameController,
-                        decoration: const InputDecoration(
-                          hintText: 'Введите название товара',
-                          hintStyle: TextStyle(color: Colors.black54),
-                          border: InputBorder.none,
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(25.0)),
-                            borderSide: BorderSide(color: Colors.transparent),
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Center(
+                        child: TextField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            hintText: 'Введите название товара',
+                            hintStyle: TextStyle(color: Colors.black54, fontWeight: FontWeight.bold),
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.zero,
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(25.0)),
-                            borderSide: BorderSide(color: primaryColor),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
+                          textAlign: TextAlign.center,
                         ),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.normal,
-                          color: textColor,
-                        ),
-                        textAlign: TextAlign.left,
                       ),
                     ),
                     
@@ -575,21 +566,21 @@ class _ProductsTabState extends State<ProductsTab> {
                               // Поле для изображения
                               Center(
                                 child: Container(
-                                  width: MediaQuery.of(context).size.width * 0.85,
+                                  width: MediaQuery.of(context).size.width * 0.7,
                                   height: 200,
                                   decoration: BoxDecoration(
-                                    color: primaryColor,
-                                    borderRadius: BorderRadius.circular(15),
+                                    color: const Color(0xFF70422F),
+                                    borderRadius: BorderRadius.circular(12),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withOpacity(0.05),
-                                        blurRadius: 4,
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 8,
                                         offset: const Offset(0, 2),
                                       ),
                                     ],
                                   ),
                                   child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(15),
+                                    borderRadius: BorderRadius.circular(12),
                                     child: Material(
                                       color: Colors.transparent,
                                       child: InkWell(
@@ -601,7 +592,7 @@ class _ProductsTabState extends State<ProductsTab> {
                                               imageUrl: _imageUrlController.text,
                                               fit: BoxFit.cover,
                                               placeholder: (context, url) => const Center(
-                                                child: CircularProgressIndicator(color: Colors.white),
+                                                child: CircularProgressIndicator(),
                                               ),
                                               errorWidget: (context, url, error) => const Center(
                                                 child: Icon(
@@ -638,51 +629,107 @@ class _ProductsTabState extends State<ProductsTab> {
                               ),
                               const SizedBox(height: 20),
                               
-                              // Расскрывающееся описание
-                              Container(
+                              // Комбо-бокс для описания с анимацией
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOutCubic,
+                                height: 50,
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(15),
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: const Color(0xFF70422F),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
                                 child: Material(
                                   color: Colors.transparent,
-                                  borderRadius: BorderRadius.circular(15),
-                                  child: ExpansionTile(
-                                    initiallyExpanded: false,
-                                    onExpansionChanged: (expanded) {
+                                  child: InkWell(
+                                    onTap: () {
                                       modalSetState(() {
-                                        _isDescriptionExpanded = expanded;
+                                        _isDescriptionExpanded = !_isDescriptionExpanded;
                                       });
                                     },
-                                    title: const Text(
-                                      'Описание',
-                                      style: TextStyle(
-                                        color: primaryColor,
-                                        fontWeight: FontWeight.bold,
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text(
+                                            'Описание',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                          AnimatedRotation(
+                                            turns: _isDescriptionExpanded ? 0.5 : 0,
+                                            duration: const Duration(milliseconds: 300),
+                                            curve: Curves.easeOutCubic,
+                                            child: const Icon(
+                                              Icons.keyboard_arrow_down,
+                                              color: Colors.white,
+                                              size: 28,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    trailing: Icon(
-                                      _isDescriptionExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                                      color: primaryColor,
-                                    ),
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                  ),
+                                ),
+                              ),
+                              
+                              // Плавно анимированный блок описания
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOutCubic,
+                                child: Container(
+                                  height: _isDescriptionExpanded ? null : 0,
+                                  padding: EdgeInsets.only(
+                                    top: _isDescriptionExpanded ? 12.0 : 0.0,
+                                    bottom: _isDescriptionExpanded ? 16.0 : 0.0,
+                                  ),
+                                  child: Opacity(
+                                    opacity: _isDescriptionExpanded ? 1.0 : 0.0,
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 300),
+                                      curve: Curves.easeOutCubic,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
+                                        color: Colors.white,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: AnimatedSize(
+                                        duration: const Duration(milliseconds: 200),
                                         child: TextField(
                                           controller: _descriptionController,
                                           decoration: const InputDecoration(
                                             hintText: 'Введите описание товара',
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.all(Radius.circular(15)),
-                                              borderSide: BorderSide(color: Colors.grey, width: 1),
-                                            ),
-                                            contentPadding: EdgeInsets.all(12),
+                                            contentPadding: EdgeInsets.all(16),
+                                            border: InputBorder.none,
+                                            hintStyle: TextStyle(color: Colors.grey),
                                           ),
-                                          maxLines: 5,
-                                          style: const TextStyle(fontSize: 14),
+                                          maxLines: null,
+                                          minLines: 3,
+                                          style: const TextStyle(fontSize: 15),
+                                          onChanged: (text) {
+                                            modalSetState(() {});
+                                          },
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -695,10 +742,18 @@ class _ProductsTabState extends State<ProductsTab> {
                                   // Поле цены
                                   Expanded(
                                     child: Container(
-                                      height: 50,
+                                      height: 55,
                                       decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
                                         color: Colors.white,
-                                        borderRadius: BorderRadius.circular(25),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
                                       child: TextField(
                                         controller: _priceController,
@@ -718,10 +773,18 @@ class _ProductsTabState extends State<ProductsTab> {
                                   // Поле скидки
                                   Expanded(
                                     child: Container(
-                                      height: 50,
+                                      height: 55,
                                       decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
                                         color: Colors.white,
-                                        borderRadius: BorderRadius.circular(25),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
                                       child: TextField(
                                         controller: _discountController,
@@ -747,10 +810,18 @@ class _ProductsTabState extends State<ProductsTab> {
                                   // Поле состава
                                   Expanded(
                                     child: Container(
-                                      height: 50,
+                                      height: 55,
                                       decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
                                         color: Colors.white,
-                                        borderRadius: BorderRadius.circular(25),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
                                       child: TextField(
                                         controller: _ingredientsController,
@@ -768,10 +839,18 @@ class _ProductsTabState extends State<ProductsTab> {
                                   // Поле граммовки
                                   Expanded(
                                     child: Container(
-                                      height: 50,
+                                      height: 55,
                                       decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.grey.shade300),
                                         color: Colors.white,
-                                        borderRadius: BorderRadius.circular(25),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(0.05),
+                                            blurRadius: 4,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
                                       ),
                                       child: TextField(
                                         controller: _weightController,
@@ -793,37 +872,50 @@ class _ProductsTabState extends State<ProductsTab> {
                               const SizedBox(height: 16),
                               
                               // Выбор категории
-                              Container(
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: primaryColor,
-                                  borderRadius: BorderRadius.circular(25),
+                              Theme(
+                                data: Theme.of(context).copyWith(
+                                  canvasColor: const Color(0xFF70422F),
+                                  shadowColor: Colors.black.withOpacity(0.2),
                                 ),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(25),
-                                    onTap: () {
-                                      _showCategorySelectionDialog(context, modalSetState);
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            _selectedCategory ?? 'Выберите категорию',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 16,
+                                child: Container(
+                                  height: 55,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(12),
+                                    color: const Color(0xFF70422F),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(12),
+                                      onTap: () {
+                                        _showCategorySelectionDialog(context, modalSetState);
+                                      },
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              _selectedCategory ?? 'Выберите категорию',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 16,
+                                              ),
                                             ),
-                                          ),
-                                          const Icon(
-                                            Icons.arrow_drop_down,
-                                            color: Colors.white,
-                                            size: 28,
-                                          ),
-                                        ],
+                                            const Icon(
+                                              Icons.arrow_drop_down,
+                                              color: Colors.white,
+                                              size: 28,
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -836,8 +928,15 @@ class _ProductsTabState extends State<ProductsTab> {
                               Container(
                                 height: 55,
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(25),
-                                  color: primaryColor,
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: const Color(0xFF70422F),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
                                 ),
                                 child: Material(
                                   color: Colors.transparent,
@@ -853,7 +952,7 @@ class _ProductsTabState extends State<ProductsTab> {
                                         }
                                       });
                                     },
-                                    borderRadius: BorderRadius.circular(25),
+                                    borderRadius: BorderRadius.circular(12),
                                     child: const Center(
                                       child: Text(
                                         'Добавить',
@@ -867,8 +966,6 @@ class _ProductsTabState extends State<ProductsTab> {
                                   ),
                                 ),
                               ),
-                              
-                              const SizedBox(height: 30),
                             ],
                           ),
                         ),
@@ -886,32 +983,88 @@ class _ProductsTabState extends State<ProductsTab> {
   
   // Метод для отображения диалога ввода URL изображения
   void _showImageUrlDialog(BuildContext context) {
+    final Color backgroundColor = const Color(0xFFFAF6F1);
+    final Color primaryColor = const Color(0xFF50321B);
+    
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFFEADAC5), // Бежевый фон
-        title: const Text('URL изображения'),
-        content: TextField(
-          controller: _imageUrlController,
-          decoration: const InputDecoration(
-            hintText: 'Введите URL изображения',
-            border: OutlineInputBorder(),
+        backgroundColor: backgroundColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        title: Text(
+          'URL изображения',
+          style: TextStyle(
+            color: primaryColor,
+            fontWeight: FontWeight.bold,
           ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _imageUrlController,
+              decoration: InputDecoration(
+                hintText: 'Введите URL изображения',
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(25),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (_imageUrlController.text.isNotEmpty)
+              Container(
+                height: 100,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: CachedNetworkImage(
+                    imageUrl: _imageUrlController.text,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => const Center(
+                      child: CircularProgressIndicator(),
+                    ),
+                    errorWidget: (context, url, error) => const Center(
+                      child: Icon(Icons.error_outline, color: Colors.red),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(dialogContext);
             },
-            child: const Text('Отмена', style: TextStyle(color: Color(0xFF70422F))),
+            style: TextButton.styleFrom(
+              foregroundColor: primaryColor,
+            ),
+            child: const Text('Отмена'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
+            ),
             onPressed: () {
               // Для обновления состояния в модальном окне необходим setState
               setState(() {}); // Обновляем основное состояние
               Navigator.pop(dialogContext);
             },
-            child: const Text('Сохранить', style: TextStyle(color: Color(0xFF70422F))),
+            child: const Text('Сохранить'),
           ),
         ],
       ),
@@ -1005,6 +1158,9 @@ class _ProductsTabState extends State<ProductsTab> {
   
   // Метод для отображения диалога выбора категории
   void _showCategorySelectionDialog(BuildContext context, StateSetter modalSetState) {
+    final Color backgroundColor = const Color(0xFFFAF6F1);
+    final Color primaryColor = const Color(0xFF50321B);
+    
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1025,24 +1181,24 @@ class _ProductsTabState extends State<ProductsTab> {
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-            decoration: const BoxDecoration(
-              color: Color(0xFF70422F),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(25),
+                topRight: Radius.circular(25),
               ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 20),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
                   child: Center(
                     child: Text(
                       'Выберите категорию',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: primaryColor,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1054,7 +1210,7 @@ class _ProductsTabState extends State<ProductsTab> {
                     maxHeight: MediaQuery.of(context).size.height * 0.4,
                   ),
                   child: _isCategoriesLoading 
-                    ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                    ? Center(child: CircularProgressIndicator(color: primaryColor))
                     : SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       child: Column(
@@ -1070,33 +1226,33 @@ class _ProductsTabState extends State<ProductsTab> {
                               Navigator.pop(context);
                             },
                             child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                               decoration: BoxDecoration(
                                 border: Border(
                                   bottom: BorderSide(
-                                    color: Colors.white.withOpacity(0.2),
+                                    color: Colors.grey.withOpacity(0.2),
                                     width: 0.5,
                                   ),
                                 ),
-                                color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+                                color: isSelected ? primaryColor.withOpacity(0.1) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     category,
-                                    style: const TextStyle(
-                                      color: Colors.white,
+                                    style: TextStyle(
+                                      color: isSelected ? primaryColor : Colors.black87,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                       fontSize: 16,
                                     ),
                                   ),
                                   if (isSelected)
-                                    const Padding(
-                                      padding: EdgeInsets.only(left: 8),
-                                      child: Icon(
-                                        Icons.check,
-                                        color: Colors.white,
-                                        size: 18,
-                                      ),
+                                    Icon(
+                                      Icons.check_circle,
+                                      color: primaryColor,
+                                      size: 20,
                                     ),
                                 ],
                               ),
@@ -1110,17 +1266,17 @@ class _ProductsTabState extends State<ProductsTab> {
                 Container(
                   height: 50,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    color: Colors.white.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(25),
+                    color: primaryColor,
                   ),
                   child: Material(
                     color: Colors.transparent,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(25),
                       onTap: () => Navigator.pop(context),
                       child: const Center(
                         child: Text(
-                          'Отмена',
+                          'Закрыть',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -1141,54 +1297,107 @@ class _ProductsTabState extends State<ProductsTab> {
 
   // Показать контекстное меню для товара
   void _showProductContextMenu(BuildContext context, Map<String, dynamic> product) {
+    final Color backgroundColor = const Color(0xFFFAF6F1);
+    final Color primaryColor = const Color(0xFF50321B);
+    
     showDialog(
       context: context,
-      builder: (context) => SimpleDialog(
-        backgroundColor: Colors.white,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.edit, color: AppColors.primary),
-            title: const Text('Изменить'),
-            onTap: () {
-              Navigator.pop(context);
-              _showEditProductForm(product);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.delete, color: Colors.red),
-            title: const Text('Удалить', style: TextStyle(color: Colors.red)),
-            onTap: () {
-              Navigator.pop(context);
-              _showDeleteProductConfirmation(product);
-            },
-          ),
-        ],
+      builder: (context) => AlertDialog(
+        backgroundColor: backgroundColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        contentPadding: EdgeInsets.zero,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+              child: Text(
+                product['name'] ?? 'Действия',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: primaryColor,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Container(
+              height: 1,
+              color: Colors.grey.withOpacity(0.2),
+            ),
+            ListTile(
+              leading: Icon(Icons.edit, color: primaryColor),
+              title: Text('Изменить', style: TextStyle(color: primaryColor)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              onTap: () {
+                Navigator.pop(context);
+                _showEditProductForm(product);
+              },
+            ),
+            Container(
+              height: 1,
+              color: Colors.grey.withOpacity(0.2),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Удалить', style: TextStyle(color: Colors.red)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              onTap: () {
+                Navigator.pop(context);
+                _showDeleteProductConfirmation(product);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
   
   // Показать диалог подтверждения удаления товара
   void _showDeleteProductConfirmation(Map<String, dynamic> product) {
+    final Color backgroundColor = const Color(0xFFFAF6F1);
+    final Color primaryColor = const Color(0xFF50321B);
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFFEADAC5),
-        title: const Text('Удаление товара'),
+        backgroundColor: backgroundColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        title: Text(
+          'Удаление товара',
+          style: TextStyle(
+            color: primaryColor,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         content: Text('Вы уверены, что хотите удалить товар "${product['name']}"?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена', style: TextStyle(color: Color(0xFF70422F))),
+            style: TextButton.styleFrom(
+              foregroundColor: primaryColor,
+            ),
+            child: const Text('Отмена'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
             ),
             onPressed: () {
               Navigator.pop(context);
               _deleteProduct(product);
             },
-            child: const Text('Удалить', style: TextStyle(color: Colors.white)),
+            child: const Text('Удалить'),
           ),
         ],
       ),
@@ -1281,30 +1490,72 @@ class _ProductsTabState extends State<ProductsTab> {
   void _showQuantityInputDialog(BuildContext context, Map<String, dynamic> product) {
     final currentQuantity = (product['quantity'] as int?) ?? 0;
     final quantityController = TextEditingController(text: currentQuantity.toString());
+    final Color backgroundColor = const Color(0xFFFAF6F1);
+    final Color primaryColor = const Color(0xFF50321B);
     
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFFEADAC5),
-        title: Text('Количество товара "${product['name']}"'),
-        content: TextField(
-          controller: quantityController,
-          decoration: const InputDecoration(
-            labelText: 'Введите количество',
-            border: OutlineInputBorder(),
-            suffixText: 'шт.',
+        backgroundColor: backgroundColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15),
+        ),
+        title: Text(
+          'Количество товара',
+          style: TextStyle(
+            color: primaryColor,
+            fontWeight: FontWeight.bold,
           ),
-          keyboardType: TextInputType.number,
-          autofocus: true,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12.0),
+              child: Text(
+                product['name'] ?? '',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            TextField(
+              controller: quantityController,
+              decoration: InputDecoration(
+                labelText: 'Введите количество',
+                filled: true,
+                fillColor: Colors.white,
+                suffixText: 'шт.',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(25),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              keyboardType: TextInputType.number,
+              autofocus: true,
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена', style: TextStyle(color: Color(0xFF70422F))),
+            style: TextButton.styleFrom(
+              foregroundColor: primaryColor,
+            ),
+            child: const Text('Отмена'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF70422F),
+              backgroundColor: primaryColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
+              ),
             ),
             onPressed: () {
               final newQuantity = int.tryParse(quantityController.text) ?? 0;
@@ -1321,7 +1572,7 @@ class _ProductsTabState extends State<ProductsTab> {
               Navigator.pop(context);
               _updateProductQuantity(product['id'], newQuantity);
             },
-            child: const Text('Сохранить', style: TextStyle(color: Colors.white)),
+            child: const Text('Сохранить'),
           ),
         ],
       ),
@@ -1330,51 +1581,73 @@ class _ProductsTabState extends State<ProductsTab> {
 
   // Метод для отображения полноразмерного изображения
   void _showFullImage(BuildContext context, String imageUrl, String productName) {
+    final Color backgroundColor = const Color(0xFFFAF6F1);
+    final Color primaryColor = const Color(0xFF50321B);
+    
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.all(10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  productName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    productName,
+                    style: TextStyle(
+                      color: primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
-              ),
-              InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 4.0,
-                child: Hero(
-                  tag: 'product_image_$imageUrl',
-                  child: CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    placeholder: (context, url) => const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    ),
-                    errorWidget: (context, url, error) => const Center(
-                      child: Icon(Icons.error, color: Colors.white, size: 50),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: Hero(
+                      tag: 'product_image_$imageUrl',
+                      child: CachedNetworkImage(
+                        imageUrl: imageUrl,
+                        placeholder: (context, url) => Center(
+                          child: CircularProgressIndicator(color: primaryColor),
+                        ),
+                        errorWidget: (context, url, error) => const Center(
+                          child: Icon(Icons.error, color: Colors.red, size: 50),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryColor,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(25),
+                      ),
+                    ),
+                    child: const Text('Закрыть'),
+                  ),
                 ),
-                child: const Text('Закрыть'),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -1810,6 +2083,7 @@ class _ProductsTabState extends State<ProductsTab> {
                                   ),
                                 ),
                               ),
+                              
                               const SizedBox(height: 24),
                               
                               // Кнопка сохранения изменений
