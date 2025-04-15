@@ -10,68 +10,84 @@ import 'firebase_options.dart';
 import 'package:ararat/screens/product/product_list_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyAppLoader());
-}
-
-class MyAppLoader extends StatelessWidget {
-  const MyAppLoader({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ARARAT',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF50321B)),
-        useMaterial3: true,
-      ),
-      home: FutureBuilder(
-        future: _initializeApp(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.done) {
-            return const MyApp();
-          }
-          
-          // Пока идет загрузка, показываем индикатор
-          return const Scaffold(
-            backgroundColor: Color(0xFFFAF6F1),
-            body: Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF50321B),
-              ),
-            ),
-          );
-        },
-      ),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-  
-  Future<void> _initializeApp() async {
-    try {
-      print('Инициализация Firebase...');
-      
-      // Инициализируем Firebase с обновленными настройками
+// Обработчик фоновых сообщений
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    // Проверяем инициализирован ли Firebase
+    if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+    }
+    print('Получено фоновое сообщение: ${message.messageId}');
+  } catch (e) {
+    print('Ошибка в обработчике фоновых сообщений: $e');
+  }
+}
+
+// Канал для уведомлений
+const AndroidNotificationChannel channel = AndroidNotificationChannel(
+  'high_importance_channel',
+  'Уведомления о заказах',
+  description: 'Этот канал используется для важных уведомлений о заказах',
+  importance: Importance.high,
+);
+
+// Инициализация локальных уведомлений
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Инициализация Firebase
+  try {
+    // Проверяем инициализирован ли Firebase
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    }
+  } catch (e) {
+    print('Ошибка при инициализации Firebase: $e');
+  }
+  
+  // Настройка обработчика фоновых сообщений
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  
+  // Инициализация локальных уведомлений
+  await flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+      AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
       
-      print('Firebase успешно инициализирован');
-      
-      // Проверяем аутентификацию
-      final auth = FirebaseAuth.instance;
-      final user = auth.currentUser;
-      if (user != null) {
-        print('Пользователь авторизован: ${user.uid}');
-        print('Email: ${user.email}');
-        print('Анонимная авторизация: ${user.isAnonymous}');
-      } else {
-        print('Пользователь не авторизован');
-      }
-      
-      // Проверяем доступ к Firestore
+  // Настройка параметров iOS уведомлений
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
+  
+  runApp(const MyAppLoader());
+}
+
+class MyAppLoader extends StatefulWidget {
+  const MyAppLoader({super.key});
+
+  @override
+  State<MyAppLoader> createState() => _MyAppLoaderState();
+}
+
+class _MyAppLoaderState extends State<MyAppLoader> {
+  bool _initialized = false;
+  bool _error = false;
+
+  // Настройка Firebase
+  Future<void> _initializeApp() async {
+    try {
+      // Проверка соединения с Firestore
       try {
         print('Проверка соединения с Firestore...');
         final testDoc = await FirebaseFirestore.instance
@@ -120,43 +136,230 @@ class MyAppLoader extends StatelessWidget {
       } catch (e) {
         print('Ошибка при инициализации кэша изображений: $e');
       }
+      
+      // Настройка обработчиков сообщений
+      _setupMessaging();
+      
+      setState(() {
+        _initialized = true;
+      });
     } catch (e) {
-      print('Ошибка инициализации приложения: $e');
-      // Продолжаем выполнение даже при ошибке Firebase
+      print('Ошибка инициализации: $e');
+      setState(() {
+        _error = true;
+      });
     }
   }
-}
+  
+  // Настройка Firebase Messaging
+  Future<void> _setupMessaging() async {
+    try {
+      // Получение токена устройства
+      final token = await FirebaseMessaging.instance.getToken();
+      print('FCM Token получен: $token');
+      
+      // Сохраняем токен в Firestore для текущего пользователя
+      if (token != null) {
+        _saveUserToken(token);
+      } else {
+        print('ОШИБКА: FCM токен не получен!');
+      }
+      
+      // Обработка при получении нового токена
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+        print('FCM Token обновлен: $newToken');
+        _saveUserToken(newToken);
+      });
+      
+      // Обработка сообщений при открытом приложении
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        print('ПОЛУЧЕНО СООБЩЕНИЕ: ${message.notification?.title}');
+        print('Данные сообщения: ${message.data}');
+        
+        final notification = message.notification;
+        final android = message.notification?.android;
+        
+        if (notification != null && android != null) {
+          print('Показываем локальное уведомление для Android');
+          try {
+            flutterLocalNotificationsPlugin.show(
+              notification.hashCode,
+              notification.title,
+              notification.body,
+              NotificationDetails(
+                android: AndroidNotificationDetails(
+                  channel.id,
+                  channel.name,
+                  channelDescription: channel.description,
+                  icon: 'launch_background',
+                  importance: Importance.high,
+                  priority: Priority.high,
+                ),
+              ),
+              payload: message.data['orderId'],
+            );
+            print('Локальное уведомление показано успешно');
+          } catch (e) {
+            print('ОШИБКА при показе локального уведомления: $e');
+          }
+        } else {
+          print('Не удалось показать уведомление: notification=${notification != null}, android=${android != null}');
+        }
+      });
+      
+      // Тестовое локальное уведомление для проверки
+      await Future.delayed(const Duration(seconds: 5));
+      try {
+        print('Отправка тестового локального уведомления...');
+        await flutterLocalNotificationsPlugin.show(
+          0,
+          'Тестовое уведомление',
+          'Проверка работы уведомлений',
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              channel.id,
+              channel.name,
+              channelDescription: channel.description,
+              icon: 'launch_background',
+              importance: Importance.high,
+              priority: Priority.high,
+            ),
+          ),
+        );
+        print('Тестовое локальное уведомление отправлено успешно');
+      } catch (e) {
+        print('ОШИБКА при отправке тестового уведомления: $e');
+      }
+      
+      // Обработка нажатия на уведомление
+      FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+        print('Нажатие на уведомление: ${message.notification?.title}');
+        _handleNotificationClick(message);
+      });
+      
+      // Проверка, было ли приложение открыто по нажатию на уведомление
+      final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+      if (initialMessage != null) {
+        _handleNotificationClick(initialMessage);
+      }
+      
+      // Запрос разрешений для iOS
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      
+      print('Статус разрешений на уведомления: ${settings.authorizationStatus}');
+      
+    } catch (e) {
+      print('Ошибка при настройке уведомлений: $e');
+    }
+  }
+  
+  // Сохраняем токен устройства пользователя
+  Future<void> _saveUserToken(String token) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('tokens')
+            .doc(token)
+            .set({
+              'token': token,
+              'platform': _getPlatform(),
+              'createdAt': FieldValue.serverTimestamp(),
+              'lastUpdated': FieldValue.serverTimestamp(),
+            });
+        
+        print('FCM токен сохранен для пользователя ${user.uid}');
+      }
+    } catch (e) {
+      print('Ошибка при сохранении токена: $e');
+    }
+  }
+  
+  // Определяем платформу устройства
+  String _getPlatform() {
+    if (Theme.of(context).platform == TargetPlatform.iOS) {
+      return 'iOS';
+    } else if (Theme.of(context).platform == TargetPlatform.android) {
+      return 'Android';
+    } else {
+      return 'web';
+    }
+  }
+  
+  // Обработка нажатия на уведомление
+  void _handleNotificationClick(RemoteMessage message) {
+    try {
+      // Здесь можно добавить навигацию на экран заказа
+      print('Обработка нажатия на уведомление');
+      
+      final orderId = message.data['orderId'];
+      if (orderId != null && orderId.isNotEmpty) {
+        // Дополнительная логика навигации будет добавлена позже
+        print('Открытие деталей заказа: $orderId');
+      }
+    } catch (e) {
+      print('Ошибка при обработке нажатия на уведомление: $e');
+    }
+  }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Показываем индикатор загрузки, пока приложение инициализируется
+    if (!_initialized) {
+      return MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset(
+                  'assets/logo/logo-ararat-final.png',
+                  width: 120,
+                  height: 120,
+                ),
+                const SizedBox(height: 20),
+                const CircularProgressIndicator(),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Показываем сообщение об ошибке, если что-то пошло не так
+    if (_error) {
+      return MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text('Произошла ошибка при загрузке приложения'),
+          ),
+        ),
+      );
+    }
+
+    // Основное приложение
     return MaterialApp(
       title: 'ARARAT',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF50321B)),
         useMaterial3: true,
         fontFamily: 'Inter',
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(fontFamily: 'Inter'),
-          bodyMedium: TextStyle(fontFamily: 'Inter'),
-          bodySmall: TextStyle(fontFamily: 'Inter'),
-          titleLarge: TextStyle(fontFamily: 'Inter'),
-          titleMedium: TextStyle(fontFamily: 'Inter'),
-          titleSmall: TextStyle(fontFamily: 'Inter'),
-          displayLarge: TextStyle(fontFamily: 'Inter'),
-          displayMedium: TextStyle(fontFamily: 'Inter'),
-          displaySmall: TextStyle(fontFamily: 'Inter'),
-          headlineLarge: TextStyle(fontFamily: 'Inter'),
-          headlineMedium: TextStyle(fontFamily: 'Inter'),
-          headlineSmall: TextStyle(fontFamily: 'Inter'),
-          labelLarge: TextStyle(fontFamily: 'Inter'),
-          labelMedium: TextStyle(fontFamily: 'Inter'),
-          labelSmall: TextStyle(fontFamily: 'Inter'),
-        ),
       ),
-      initialRoute: '/login',
+      home: FirebaseAuth.instance.currentUser != null
+          ? const MainScreen()
+          : const LoginScreen(),
       routes: {
         '/login': (context) => const LoginScreen(),
         '/registration': (context) => const RegistrationScreen(),
