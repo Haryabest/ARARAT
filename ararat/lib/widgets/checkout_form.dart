@@ -328,22 +328,32 @@ class _CheckoutFormState extends State<CheckoutForm> {
                         Padding(
                           padding: const EdgeInsets.all(16),
                       child: ElevatedButton(
-                            onPressed: _submitOrder,
+                            onPressed: _isLoading ? null : _submitOrder,
                         style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF50321B),
+                              disabledBackgroundColor: const Color(0xFF50321B).withOpacity(0.5),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
                         ),
-                        child: const Text(
-                          'Подтвердить заказ',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: _isLoading 
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Подтвердить заказ',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -353,15 +363,6 @@ class _CheckoutFormState extends State<CheckoutForm> {
                 ),
               ),
             ],
-          ),
-          if (_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.4),
-              child: const Center(
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-              ),
-            ),
           ),
         ],
       ),
@@ -1367,7 +1368,6 @@ class _CheckoutFormState extends State<CheckoutForm> {
   Future<void> _submitOrder() async {
     // Предотвращаем повторное нажатие кнопки во время обработки
     if (_isLoading) return;
-    setState(() => _isLoading = true);
     
     // Проверяем все обязательные поля
     bool hasErrors = false;
@@ -1418,9 +1418,11 @@ class _CheckoutFormState extends State<CheckoutForm> {
     
     // Если есть ошибки, прекращаем оформление заказа
     if (hasErrors) {
-      setState(() => _isLoading = false);
       return;
     }
+    
+    // Устанавливаем состояние загрузки
+    setState(() => _isLoading = true);
     
     // Собираем данные о адресе доставки с учетом всех полей
     final deliveryAddress = {
@@ -1457,24 +1459,6 @@ class _CheckoutFormState extends State<CheckoutForm> {
       'clientTimestamp': DateTime.now().toIso8601String(),
     };
     
-    // Показываем индикатор загрузки
-    BuildContext? dialogContext;
-    
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (BuildContext context) {
-          dialogContext = context;
-          return const Center(
-            child: CircularProgressIndicator(
-              color: Colors.white,
-            ),
-          );
-        },
-      );
-    }
-    
     try {
       // Инициализируем сервис заказов
       final orderService = OrderService();
@@ -1505,11 +1489,6 @@ class _CheckoutFormState extends State<CheckoutForm> {
       // Очищаем корзину после успешного создания заказа
       if (widget.onOrderCompleted != null) {
         widget.onOrderCompleted!();
-      }
-      
-      // Закрываем диалог загрузки, если он был показан
-      if (dialogContext != null && mounted) {
-        Navigator.pop(dialogContext!);
       }
       
       // Сбрасываем состояние загрузки
@@ -1548,11 +1527,6 @@ class _CheckoutFormState extends State<CheckoutForm> {
       }
     } catch (e) {
       print('Ошибка при оформлении заказа: $e');
-      
-      // Закрываем диалог загрузки, если он был показан
-      if (dialogContext != null && mounted) {
-        Navigator.pop(dialogContext!);
-      }
       
       // Сбрасываем состояние загрузки
       if (mounted) {
