@@ -493,8 +493,14 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
       vsync: this,
     );
     
+    // Добавляем слушателя для TextField
+    _searchController.addListener(_onSearchChanged);
+    
     // Добавляем метод загрузки данных
     _loadData();
+    
+    // Загружаем популярные запросы
+    _loadPopularQueries();
     
     // Добавляем слушателя для обновления списка товаров
     ProductUpdateNotifier().updateNotifier.addListener(_onProductsUpdated);
@@ -538,6 +544,60 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
         }
       });
     }
+  }
+
+  void _onSearchChanged() {
+    if (_searchController.text.isEmpty) {
+      // Если поисковая строка пуста, возвращаем фильтрацию только по категории
+      setState(() {
+        _filterProductsByCategory();
+      });
+    } else {
+      // Иначе фильтруем по запросу и категории
+      setState(() {
+        _searchProducts(_searchController.text, saveQuery: false);
+      });
+    }
+  }
+  
+  void _searchProducts(String query, {bool saveQuery = false}) {
+    // Приводим запрос к нижнему регистру для сравнения без учета регистра
+    final String normalizedQuery = query.toLowerCase().trim();
+    
+    if (normalizedQuery.isEmpty) {
+      _filterProductsByCategory();
+      return;
+    }
+    
+    // Если запрос не пустой и нужно сохранить его, сохраняем в базе данных
+    if (saveQuery) {
+      _searchService.saveQuery(normalizedQuery)
+        .then((_) => _loadPopularQueries());
+    }
+    
+    // Если выбрана категория "Все" или категория не выбрана, ищем по всем продуктам
+    if (_selectedCategory.isEmpty || _selectedCategory == 'Все') {
+      _filteredProducts = _products.where((product) {
+        return product.name.toLowerCase().contains(normalizedQuery) || 
+               (product.description?.toLowerCase().contains(normalizedQuery) ?? false) ||
+               (product.ingredients?.toLowerCase().contains(normalizedQuery) ?? false) ||
+               product.category.toLowerCase().contains(normalizedQuery);
+      }).toList();
+    } else {
+      // Иначе ищем только среди товаров выбранной категории
+      _filteredProducts = _products.where((product) {
+        return product.category == _selectedCategory && 
+              (product.name.toLowerCase().contains(normalizedQuery) ||
+               (product.description?.toLowerCase().contains(normalizedQuery) ?? false) ||
+               (product.ingredients?.toLowerCase().contains(normalizedQuery) ?? false));
+      }).toList();
+    }
+    
+    // Сортируем результаты поиска
+    _sortProducts();
+    
+    // Логируем информацию для отладки
+    print('Поиск по запросу: "$normalizedQuery", найдено: ${_filteredProducts.length} товаров');
   }
   
   @override
@@ -721,52 +781,6 @@ class _HomeTabState extends State<HomeTab> with TickerProviderStateMixin {
         _refreshAnimController.reverse();
       }
     });
-  }
-  
-  void _onSearchChanged() {
-    if (_searchController.text.isEmpty) {
-      // Если поисковая строка пуста, возвращаем фильтрацию только по категории
-      setState(() {
-        _filterProductsByCategory();
-      });
-    } else {
-      // Иначе фильтруем по запросу и категории
-      setState(() {
-        _searchProducts(_searchController.text, saveQuery: false);
-      });
-    }
-  }
-  
-  void _searchProducts(String query, {bool saveQuery = false}) {
-    // Приводим запрос к нижнему регистру для сравнения без учета регистра
-    final String normalizedQuery = query.toLowerCase();
-    
-    // Если запрос не пустой и нужно сохранить его, сохраняем в базе данных
-    if (saveQuery && query.trim().isNotEmpty) {
-      _searchService.saveQuery(query.trim())
-        .then((_) => _loadPopularQueries());
-    }
-    
-    // Если выбрана категория "Все" или категория не выбрана, ищем по всем продуктам
-    if (_selectedCategory.isEmpty || _selectedCategory == 'Все') {
-      _filteredProducts = _products.where((product) {
-        return product.name.toLowerCase().contains(normalizedQuery) || 
-               (product.description?.toLowerCase().contains(normalizedQuery) ?? false) ||
-               (product.ingredients?.toLowerCase().contains(normalizedQuery) ?? false) ||
-               product.category.toLowerCase().contains(normalizedQuery);
-      }).toList();
-    } else {
-      // Иначе ищем только среди товаров выбранной категории
-      _filteredProducts = _products.where((product) {
-        return product.category == _selectedCategory && 
-              (product.name.toLowerCase().contains(normalizedQuery) ||
-               (product.description?.toLowerCase().contains(normalizedQuery) ?? false) ||
-               (product.ingredients?.toLowerCase().contains(normalizedQuery) ?? false));
-      }).toList();
-    }
-    
-    // Сортируем результаты поиска
-    _sortProducts();
   }
   
   void _scrollListener() {
