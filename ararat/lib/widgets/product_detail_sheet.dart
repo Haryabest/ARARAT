@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:ararat/screens/main/tabs/home_tab.dart'; // Импортируем для доступа к CartManager
 
@@ -39,7 +40,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
     
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 250),
     );
     
     _heightAnimation = Tween<double>(
@@ -47,8 +48,13 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
       end: _expandedSheetHeight,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeOutCubic,
+      curve: Curves.fastOutSlowIn,
     ));
+    
+    // Добавляем небольшую задержку для инициализации, чтобы избежать лагов
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) setState(() {});
+    });
   }
   
   @override
@@ -85,7 +91,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
   Widget build(BuildContext context) {
     // Размер экрана для ограничения максимальной высоты
     final screenHeight = MediaQuery.of(context).size.height;
-    final maxSheetHeight = screenHeight * 0.9; // 90% от высоты экрана
+    final maxSheetHeight = screenHeight * 0.85; // Уменьшаем максимальную высоту до 85% от высоты экрана
     
     // Получаем локальное количество товара для отображения статуса
     final String productName = widget.product['name'];
@@ -103,15 +109,16 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
       onVerticalDragUpdate: (details) {
         final dragDistance = _dragStartPosition - details.globalPosition.dy;
         
+        // Применяем плавное демпфирование для более естественного перетаскивания
+        final dampening = 0.9; // Коэффициент демпфирования для плавности
+        final dampedDragDistance = dragDistance * dampening;
+        
         // Обновляем текущую высоту на основе перетаскивания
         setState(() {
-          _currentHeight = (_currentHeight + dragDistance).clamp(
+          _currentHeight = (_currentHeight + dampedDragDistance).clamp(
             _initialSheetHeight, 
             maxSheetHeight
           );
-          
-          // Определяем, считается ли панель развернутой
-          _isExpanded = _currentHeight > (_initialSheetHeight + (_expandedSheetHeight - _initialSheetHeight) / 2);
           
           // Обновляем позицию начала перетаскивания
           _dragStartPosition = details.globalPosition.dy;
@@ -120,54 +127,29 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
       
       // Обрабатываем завершение перетаскивания
       onVerticalDragEnd: (details) {
-        // Решаем, в какое состояние анимировать панель
+        // Просто обрабатываем быстрые свайпы для закрытия
         if (details.velocity.pixelsPerSecond.dy > 500) {
           // Быстрый свайп вниз - закрываем панель
           Navigator.of(context).pop();
-        } else if (details.velocity.pixelsPerSecond.dy > 200) {
-          // Умеренный свайп вниз - сворачиваем панель
-          setState(() {
-            _isExpanded = false;
-            _currentHeight = _initialSheetHeight;
-          });
-          _animationController.animateTo(0.0);
-        } else if (details.velocity.pixelsPerSecond.dy < -200) {
-          // Умеренный свайп вверх - разворачиваем панель
-          setState(() {
-            _isExpanded = true;
-            _currentHeight = _expandedSheetHeight;
-          });
-          _animationController.animateTo(1.0);
-        } else {
-          // Медленное перетаскивание - завершаем анимацию в ближайшее состояние
-          if (_isExpanded) {
-            _animationController.animateTo(1.0);
-            _currentHeight = _expandedSheetHeight;
-          } else {
-            _animationController.animateTo(0.0);
-            _currentHeight = _initialSheetHeight;
-          }
         }
       },
       
       child: AnimatedBuilder(
         animation: _animationController,
         builder: (context, child) {
-          // Используем прогресс расширения для анимаций
-          final expansionProgress = _expansionProgress;
+          // Используем текущую высоту напрямую
+          final height = _currentHeight;
           
-          // Рассчитываем высоту панели
-          final height = _animationController.isAnimating
-              ? _heightAnimation.value
-              : _currentHeight;
+          // Рассчитываем прогресс растяжения для визуальных эффектов
+          final expansionProgress = ((height - _initialSheetHeight) / 
+              (maxSheetHeight - _initialSheetHeight)).clamp(0.0, 1.0);
           
           // Определяем позицию изображения (фиксированная от верха)
           const imageTopOffset = 30.0;
           
           // Рассчитываем размер изображения для корректного расположения текста
-          // Начальный размер 180, но уменьшаем его только до определенного предела
           const double baseImageSize = 180.0;
-          const double shrinkFactor = 0.22;
+          const double shrinkFactor = 0.18; // Уменьшенный фактор для более плавного изменения
           // Ограничиваем уменьшение размера изображения
           final double limitedExpansionProgress = expansionProgress > 0.6 ? 0.6 : expansionProgress;
           final imageSize = baseImageSize * (1.0 - shrinkFactor * limitedExpansionProgress);
@@ -175,12 +157,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> with SingleTick
           // Вычисляем позицию для основного контента - фиксируем под изображением
           const contentTopOffset = imageTopOffset + baseImageSize + 10.0;
           
-          // Рассчитываем прозрачность содержимого
+          // Рассчитываем прозрачность содержимого для более плавного появления
           double contentOpacity;
-          if (expansionProgress < 0.4) {
+          if (expansionProgress < 0.3) { // Начинаем показывать контент раньше
             contentOpacity = 0.0;
           } else {
-            contentOpacity = ((expansionProgress - 0.4) / 0.6).clamp(0.0, 1.0);
+            contentOpacity = ((expansionProgress - 0.3) / 0.7).clamp(0.0, 1.0);
           }
           
           return Container(
@@ -595,6 +577,10 @@ Future<Map<String, dynamic>?> showProductDetailSheet(
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
     enableDrag: true,
+    barrierColor: Colors.black54,
+    elevation: 0,
+    useRootNavigator: true,
+    isDismissible: true,
     builder: (BuildContext context) {
       return ProductDetailSheet(product: productCopy);
     },
